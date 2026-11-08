@@ -26,6 +26,15 @@ if [ -z "$IDS" ] || [ "$IDS" = "None" ]; then
 fi
 
 for ID in $IDS; do
+  # An instance that is still booting is not yet registered with SSM. It needs no push:
+  # its boot-time deploy service reads the release tag published above.
+  PING=$(aws ssm describe-instance-information --filters "Key=InstanceIds,Values=${ID}" \
+    --query 'InstanceInformationList[0].PingStatus' --output text 2>/dev/null || echo "None")
+  if [ "$PING" != "Online" ]; then
+    echo "${ID}: not registered with SSM yet (still booting); it will deploy ${TAG} itself at boot."
+    continue
+  fi
+
   echo "::group::${TIER}: deploying ${TAG} to ${ID}"
   CMD_ID=$(aws ssm send-command \
     --instance-ids "$ID" \

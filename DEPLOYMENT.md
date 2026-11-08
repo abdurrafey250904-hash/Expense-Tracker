@@ -164,7 +164,9 @@ for `/api/*` Nginx proxies → internal ALB → app container (Express) → Mong
 | F7 | Job **Build & push** (matrix web/app) | Builds both images with layer caching and pushes them to ECR tagged with the git commit SHA. |
 | F8 | Job **Rolling deploy** — `.github/scripts/rolling-deploy.sh app` then `web` | Updates the SSM release tag, then runs `deploy.sh` on one instance at a time via SSM Run Command (no SSH), so the site stays up. |
 | F9 | **Smoke test** through the public ALB | Pipeline only goes green when `/api/health` reports the new commit SHA and `db: connected`. |
-| F10 | Committed and pushed to `main` | Triggered the first full pipeline run, which deployed the application. |
+| F10 | Committed and pushed to `main` (run #1) | Tests, integration test, both image pushes and the app-tier deploy passed; the site went live (`/api/health` → new SHA, `db: connected`). |
+| F11 | Fixed run #1's only failure: the web deploy hit an instance the ASG had *just* launched (not yet registered with SSM) | `rolling-deploy.sh` now skips still-booting instances (they self-deploy from the published tag at boot); CI user got `ssm:DescribeInstanceInformation` (reviewed `terraform plan`: 1 change). |
+| F12 | Upgraded `actions/checkout`, `actions/setup-node`, `configure-aws-credentials` to v5 and pushed (run #2) | Removes the Node 20 deprecation warnings; run #2 is the clean end-to-end green run used as evidence. |
 
 ### Phase G — Verification
 | # | Step | One-line explanation |

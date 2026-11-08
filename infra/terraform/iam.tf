@@ -131,7 +131,7 @@ data "aws_iam_policy_document" "github_deploy" {
   statement {
     sid = "ReadDeploymentState"
     actions = [
-      "ssm:GetCommandInvocation", "ssm:ListCommandInvocations", "ssm:ListCommands",
+      "ssm:GetCommandInvocation", "ssm:ListCommandInvocations", "ssm:ListCommands", "ssm:DescribeInstanceInformation",
       "autoscaling:DescribeAutoScalingGroups", "ec2:DescribeInstances",
     ]
     resources = ["*"]
