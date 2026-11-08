@@ -1,0 +1,81 @@
+#!/bin/bash
+# Bootstraps the self-managed MongoDB host:
+#   1. waits for the separate EBS data volume, formats it once, mounts it at /data/mongo
+#   2. runs MongoDB 7 in Docker with authentication, data on the EBS volume, logs to CloudWatch
+#   3. installs a daily systemd timer that streams a gzip mongodump to the S3 backup bucket
+set -euo pipefail
+exec > >(tee -a /var/log/user-data.log) 2>&1
+
+dnf install -y docker jq xfsprogs
+systemctl enable --now docker
+
+# ---- 1. Persistent data volume ----
+DEV="/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${volume_id}"
+for _ in $(seq 1 60); do [ -e "$DEV" ] && break; echo "waiting for data volume"; sleep 5; done
+[ -e "$DEV" ] || { echo "data volume never attached"; exit 1; }
+if ! blkid "$DEV" >/dev/null 2>&1; then
+  mkfs.xfs "$DEV"   # first boot only; later boots/replacements keep existing data
+fi
+mkdir -p /data/mongo
+UUID=$(blkid -s UUID -o value "$DEV")
+grep -q "$UUID" /etc/fstab || echo "UUID=$UUID /data/mongo xfs defaults,nofail 0 2" >> /etc/fstab
+mount -a
+
+# ---- 2. MongoDB container ----
+mkdir -p /opt/mongodb
+umask 077
+aws secretsmanager get-secret-value --region "${region}" --secret-id "${db_secret_arn}" \
+  --query SecretString --output text | jq -r 'to_entries[] | "\(.key)=\(.value)"' > /opt/mongodb/db.env
+
+TOKEN=$(curl -sX PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
+
+docker rm -f mongodb >/dev/null 2>&1 || true
+docker run -d --name mongodb --restart always \
+  -p 27017:27017 \
+  -v /data/mongo:/data/db \
+  --env-file /opt/mongodb/db.env \
+  --log-driver awslogs \
+  --log-opt awslogs-region="${region}" \
+  --log-opt awslogs-group="${log_group}" \
+  --log-opt awslogs-stream="$INSTANCE_ID" \
+  mongo:7 --auth --wiredTigerCacheSizeGB 0.5
+
+# ---- 3. Daily backups to S3 (object storage) ----
+cat > /opt/mongodb/backup.sh <<'BACKUP'
+#!/bin/bash
+set -euo pipefail
+KEY="backups/$(date -u +%Y-%m-%dT%H%M%SZ).archive.gz"
+# Credentials are read from the container's own environment, never placed on a command line.
+docker exec mongodb sh -c 'mongodump -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --archive --gzip' \
+  | aws s3 cp - "s3://${backup_bucket}/$KEY" --region "${region}"
+echo "Backup uploaded to s3://${backup_bucket}/$KEY"
+BACKUP
+chmod 700 /opt/mongodb/backup.sh
+
+cat > /etc/systemd/system/mongodb-backup.service <<'UNIT'
+[Unit]
+Description=Dump MongoDB to S3
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/mongodb/backup.sh
+UNIT
+
+cat > /etc/systemd/system/mongodb-backup.timer <<'UNIT'
+[Unit]
+Description=Daily MongoDB backup to S3
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now mongodb-backup.timer
+echo "MongoDB host ready"

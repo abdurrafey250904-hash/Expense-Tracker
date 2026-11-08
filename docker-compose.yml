@@ -1,0 +1,51 @@
+# Local multi-service orchestration of the three tiers.
+#   docker compose up --build   ->  http://localhost:8080
+# In AWS the same images run on separate Auto Scaling Groups and MongoDB is
+# replaced by Amazon DocumentDB.
+services:
+  db:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    networks: [data]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      retries: 5
+
+  app:
+    build: ./backend
+    image: expense-tracker-app:local
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      MONGO_URI: mongodb://db:27017/expense_tracker
+      JWT_SECRET: ${JWT_SECRET:-local-dev-only-secret}
+      JWT_EXPIRES_IN: 7d
+      CLIENT_URL: http://localhost:8080
+      ENABLE_CRON: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [backend, data]   # can reach db; not published to the host
+
+  web:
+    build: ./frontend
+    image: expense-tracker-web:local
+    restart: unless-stopped
+    environment:
+      API_UPSTREAM: app:5000
+      NGINX_RESOLVER: 127.0.0.11
+    ports:
+      - "8080:8080"
+    depends_on: [app]
+    networks: [backend]          # can reach app; cannot reach db
+
+networks:
+  backend:
+  data:
+
+volumes:
+  mongo-data:

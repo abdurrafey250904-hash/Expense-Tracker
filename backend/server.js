@@ -1,48 +1,30 @@
 require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const morgan = require('morgan');
+const mongoose = require('mongoose');
 const connectDB = require('./config/db');
-const { notFound, errorHandler } = require('./middleware/errorHandler');
+const app = require('./app');
 const { scheduleMonthlyReports } = require('./utils/monthlyReportCron');
-
-const authRoutes = require('./routes/auth');
-const expenseRoutes = require('./routes/expenses');
-const reportRoutes = require('./routes/reports');
-const budgetRoutes = require('./routes/budget');
-
-connectDB();
-
-const app = express();
-
-app.use(
-  cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
-    credentials: true,
-  })
-);
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-if (process.env.NODE_ENV !== 'production') {
-  app.use(morgan('dev'));
-}
-
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-app.use('/api/auth', authRoutes);
-app.use('/api/expenses', expenseRoutes);
-app.use('/api/reports', reportRoutes);
-app.use('/api/budget', budgetRoutes);
-
-app.use(notFound);
-app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+connectDB();
+
+const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
-  scheduleMonthlyReports();
+  // In a horizontally-scaled deployment every replica would fire the cron job,
+  // so it can be switched off per environment with ENABLE_CRON=false.
+  if (process.env.ENABLE_CRON !== 'false') {
+    scheduleMonthlyReports();
+  }
 });
+
+// Graceful shutdown so rolling deployments / scale-in don't drop in-flight requests.
+const shutdown = (signal) => {
+  console.log(`${signal} received, shutting down gracefully...`);
+  server.close(async () => {
+    await mongoose.connection.close(false).catch(() => {});
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(1), 10000).unref();
+};
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

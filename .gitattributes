@@ -1,0 +1,7 @@
+# Files executed on Linux (EC2, containers, CI runners) must keep LF endings.
+*.sh            text eol=lf
+*.tftpl         text eol=lf
+*.tf            text eol=lf
+*.yml           text eol=lf
+*.template      text eol=lf
+Dockerfile      text eol=lf

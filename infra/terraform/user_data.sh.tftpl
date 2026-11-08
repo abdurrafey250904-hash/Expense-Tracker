@@ -1,0 +1,104 @@
+#!/bin/bash
+# Bootstraps a ${tier}-tier instance: installs Docker, writes the deploy script,
+# then starts the container. The same deploy script is invoked by CI/CD through
+# SSM Run Command for zero-SSH rolling releases.
+set -euo pipefail
+exec > >(tee -a /var/log/user-data.log) 2>&1
+
+dnf install -y docker jq
+systemctl enable --now docker
+
+mkdir -p /opt/expense-tracker
+cat > /opt/expense-tracker/deploy.sh <<'DEPLOY'
+#!/bin/bash
+# Pull the release tag published by CI/CD and (re)start this tier's container.
+set -euo pipefail
+exec 9>/var/lock/expense-tracker-deploy.lock
+flock 9   # never let boot-time and CI-triggered deploys overlap
+
+REGION="${region}"
+TIER="${tier}"
+REPO_URL="${repo_url}"
+NAME="expense-tracker-${tier}"
+
+IMDS_TOKEN=$(curl -sX PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
+
+TAG=$(aws ssm get-parameter --region "$REGION" --name "${image_tag_param}" --query Parameter.Value --output text)
+if [ "$TAG" = "none" ]; then
+  echo "No release has been published by the pipeline yet."
+  exit 1
+fi
+IMAGE="$REPO_URL:$TAG"
+echo "Deploying $IMAGE on $INSTANCE_ID"
+
+aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$${REPO_URL%%/*}"
+docker pull "$IMAGE"   # pull first so the swap below takes only a few seconds
+
+%{ if tier == "app" ~}
+# Runtime secrets come from Secrets Manager. They never touch the image or the git repo.
+ENV_FILE=/opt/expense-tracker/app.env
+umask 077
+aws secretsmanager get-secret-value --region "$REGION" --secret-id "${secret_arn}" \
+  --query SecretString --output text | jq -r 'to_entries[] | "\(.key)=\(.value)"' > "$ENV_FILE"
+cat >> "$ENV_FILE" <<ENV
+NODE_ENV=production
+PORT=5000
+CLIENT_URL=${client_url}
+JWT_EXPIRES_IN=7d
+ENABLE_CRON=false
+EMAIL_HOST=${email_host}
+EMAIL_PORT=${email_port}
+APP_VERSION=$TAG
+ENV
+RUN_ARGS=(-p 5000:5000 --env-file "$ENV_FILE")
+HEALTH_URL="http://127.0.0.1:5000/api/health"
+%{ else ~}
+RUN_ARGS=(-p 80:8080 -e "API_UPSTREAM=${api_upstream}" -e "NGINX_RESOLVER=169.254.169.253")
+HEALTH_URL="http://127.0.0.1/healthz"
+%{ endif ~}
+
+docker rm -f "$NAME" >/dev/null 2>&1 || true
+docker run -d --name "$NAME" --restart unless-stopped "$${RUN_ARGS[@]}" \
+  --log-driver awslogs \
+  --log-opt awslogs-region="$REGION" \
+  --log-opt awslogs-group="${log_group}" \
+  --log-opt awslogs-stream="$INSTANCE_ID" \
+  "$IMAGE"
+
+for _ in $(seq 1 45); do
+  if curl -fs "$HEALTH_URL" >/dev/null; then
+    echo "Healthy: $IMAGE"
+    docker image prune -af >/dev/null || true
+    exit 0
+  fi
+  sleep 2
+done
+echo "Container failed its health check"
+docker logs --tail 50 "$NAME" || true
+exit 1
+DEPLOY
+chmod 750 /opt/expense-tracker/deploy.sh
+
+# systemd unit: runs the deploy at every boot and retries every 30s until it succeeds
+# (the very first boot happens before the pipeline has pushed any image).
+cat > /etc/systemd/system/expense-tracker-deploy.service <<'UNIT'
+[Unit]
+Description=Deploy the expense-tracker container from ECR
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=/opt/expense-tracker/deploy.sh
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable expense-tracker-deploy.service
+systemctl start --no-block expense-tracker-deploy.service

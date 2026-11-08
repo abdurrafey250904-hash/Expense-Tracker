@@ -1,0 +1,179 @@
+# CI/CD for the three-tier Expense Tracker on AWS.
+#
+#   pull_request -> test + build + integration test (no AWS access)
+#   push to main -> the above, then build & push images to Amazon ECR,
+#                   rolling deploy to the EC2 Auto Scaling Groups via SSM,
+#                   and a smoke test through the public load balancer.
+#
+# AWS authentication: a dedicated, least-privilege IAM user (expense-tracker-github-deploy)
+# whose access key is stored as GitHub *encrypted secrets*. It can only push to the two ECR
+# repos, update the two release parameters and run commands on instances tagged
+# Project=expense-tracker. (OIDC federation is preferred but blocked by this account's SCP.)
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Never run two deployments at once; queue them instead of cancelling a rollout midway.
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-2' }}
+  PROJECT: expense-tracker
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  # ---------------------------------------------------------------- CI
+  backend-test:
+    name: Backend unit tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+
+  frontend-build:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+
+  terraform-validate:
+    name: Terraform fmt & validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+
+  integration-test:
+    name: Integration test (docker compose, 3 tiers)
+    runs-on: ubuntu-latest
+    needs: [backend-test, frontend-build]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build images and start web + app + db
+        run: docker compose up -d --build --wait --wait-timeout 180
+      - name: End-to-end checks through the web tier
+        run: |
+          set -euo pipefail
+          BASE=http://localhost:8080
+          curl -fsS $BASE/healthz
+          curl -fsS $BASE/ | grep -q '<div id="root">'
+          curl -fsS $BASE/api/health | tee /dev/stderr | grep -q '"db":"connected"'
+          TOKEN=$(curl -fsS -X POST $BASE/api/auth/register -H 'Content-Type: application/json' \
+            -d '{"name":"CI Bot","email":"ci@example.com","password":"secret123"}' | jq -r .token)
+          test -n "$TOKEN" && test "$TOKEN" != "null"
+          curl -fsS -X POST $BASE/api/expenses -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+            -d '{"title":"CI coffee","amount":3.5,"category":"Food"}' >/dev/null
+          curl -fsS $BASE/api/expenses -H "Authorization: Bearer $TOKEN" | grep -q 'CI coffee'
+          echo "All three tiers work together"
+      - name: Container logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+      - if: always()
+        run: docker compose down -v
+
+  # ---------------------------------------------------------------- CD
+  build-push:
+    name: Build & push ${{ matrix.tier }} image to ECR
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [integration-test, terraform-validate]
+    runs-on: ubuntu-latest
+    environment: production
+    strategy:
+      matrix:
+        include:
+          - tier: web
+            context: frontend
+          - tier: app
+            context: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          provenance: false
+          tags: ${{ steps.ecr.outputs.registry }}/${{ env.PROJECT }}-${{ matrix.tier }}:${{ env.IMAGE_TAG }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.tier }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.tier }}
+
+  deploy:
+    name: Rolling deploy to AWS
+    needs: build-push
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.APP_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      # App tier first (backwards-compatible API), then the web tier that calls it.
+      - name: Deploy application tier
+        run: bash .github/scripts/rolling-deploy.sh app "$IMAGE_TAG"
+      - name: Deploy web tier
+        run: bash .github/scripts/rolling-deploy.sh web "$IMAGE_TAG"
+      - name: Smoke test through the public load balancer
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 20); do
+            BODY=$(curl -fsS "${{ vars.APP_URL }}/api/health" || true)
+            echo "$BODY"
+            if echo "$BODY" | grep -q "\"version\":\"$IMAGE_TAG\"" && echo "$BODY" | grep -q '"db":"connected"'; then
+              curl -fsS "${{ vars.APP_URL }}/" | grep -q '<div id="root">'
+              echo "Release $IMAGE_TAG is live at ${{ vars.APP_URL }}"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Smoke test failed"; exit 1

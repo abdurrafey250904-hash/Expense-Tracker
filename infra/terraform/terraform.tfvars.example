@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars (git-ignored) and adjust.
+aws_region = "ap-southeast-2"
+
+# Optional: receive CloudWatch alarm emails (you must confirm the SNS subscription email)
+# alarm_email = "you@example.com"
+
+# Optional: SMTP credentials for report emails. These end up in AWS Secrets Manager only.
+# Prefer passing them through environment variables instead of this file:
+#   $env:TF_VAR_email_user = "you@gmail.com"; $env:TF_VAR_email_pass = "app-password"
+# email_user = ""
+# email_pass = ""
+
+# High availability for the database (adds a replica in a second AZ, roughly doubles DB cost)
+# docdb_instance_count = 2
