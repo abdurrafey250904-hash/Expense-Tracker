@@ -1,0 +1,64 @@
+# VPC
+$ aws ec2 describe-vpcs --vpc-ids vpc-06eeeb7fc00b7eee2 --query Vpcs[].{VpcId:VpcId,Cidr:CidrBlock,Name:Tags[?Key==`Name`]|[0].Value} --output table
+
+-----------------------------------------------------------------
+|                         DescribeVpcs                          |
++-------------+-----------------------+-------------------------+
+|    Cidr     |         Name          |          VpcId          |
++-------------+-----------------------+-------------------------+
+|  10.0.0.0/16|  expense-tracker-vpc  |  vpc-06eeeb7fc00b7eee2  |
++-------------+-----------------------+-------------------------+
+
+# Subnets
+$ aws ec2 describe-subnets --filters Name=vpc-id,Values=vpc-06eeeb7fc00b7eee2 --query sort_by(Subnets,&CidrBlock)[].{Name:Tags[?Key==`Name`]|[0].Value,Cidr:CidrBlock,AZ:AvailabilityZone,PublicIpOnLaunch:MapPublicIpOnLaunch} --output table
+
+--------------------------------------------------------------------------------------------------------
+|                                            DescribeSubnets                                           |
++-----------------+---------------+-----------------------------------------------+--------------------+
+|       AZ        |     Cidr      |                     Name                      | PublicIpOnLaunch   |
++-----------------+---------------+-----------------------------------------------+--------------------+
+|  ap-southeast-2a|  10.0.1.0/24  |  expense-tracker-public-ap-southeast-2a       |  True              |
+|  ap-southeast-2a|  10.0.11.0/24 |  expense-tracker-private-app-ap-southeast-2a  |  False             |
+|  ap-southeast-2b|  10.0.12.0/24 |  expense-tracker-private-app-ap-southeast-2b  |  False             |
+|  ap-southeast-2b|  10.0.2.0/24  |  expense-tracker-public-ap-southeast-2b       |  True              |
+|  ap-southeast-2a|  10.0.21.0/24 |  expense-tracker-private-db-ap-southeast-2a   |  False             |
+|  ap-southeast-2b|  10.0.22.0/24 |  expense-tracker-private-db-ap-southeast-2b   |  False             |
++-----------------+---------------+-----------------------------------------------+--------------------+
+
+# Route tables
+$ aws ec2 describe-route-tables --filters Name=vpc-id,Values=vpc-06eeeb7fc00b7eee2 --query RouteTables[].{Name:Tags[?Key==`Name`]|[0].Value,Routes:join(`, `,Routes[].join(` -> `,[DestinationCidrBlock,GatewayId||NatGatewayId]))} --output table
+
+----------------------------------------------------------------------------------------------
+|                                     DescribeRouteTables                                    |
++---------------------------------+----------------------------------------------------------+
+|              Name               |                         Routes                           |
++---------------------------------+----------------------------------------------------------+
+|  expense-tracker-private-db-rt  |  10.0.0.0/16-> local, 0.0.0.0/0-> nat-06d845fdb9a3eb063  |
+|  None                           |  10.0.0.0/16-> local                                     |
+|  expense-tracker-private-app-rt |  10.0.0.0/16-> local, 0.0.0.0/0-> nat-06d845fdb9a3eb063  |
+|  expense-tracker-public-rt      |  10.0.0.0/16-> local, 0.0.0.0/0-> igw-04dd3521fd980d8cd  |
++---------------------------------+----------------------------------------------------------+
+
+# Internet gateway
+$ aws ec2 describe-internet-gateways --filters Name=attachment.vpc-id,Values=vpc-06eeeb7fc00b7eee2 --query InternetGateways[].{Id:InternetGatewayId,State:Attachments[0].State} --output table
+
+----------------------------------------
+|       DescribeInternetGateways       |
++------------------------+-------------+
+|           Id           |    State    |
++------------------------+-------------+
+|  igw-04dd3521fd980d8cd |  available  |
++------------------------+-------------+
+
+# NAT gateway
+$ aws ec2 describe-nat-gateways --filter Name=vpc-id,Values=vpc-06eeeb7fc00b7eee2 --query NatGateways[].{Id:NatGatewayId,State:State,Subnet:SubnetId,PublicIp:NatGatewayAddresses[0].PublicIp} --output table
+
+------------------------------------------
+|           DescribeNatGateways          |
++-----------+----------------------------+
+|  Id       |  nat-06d845fdb9a3eb063     |
+|  PublicIp |  16.178.109.205            |
+|  State    |  available                 |
+|  Subnet   |  subnet-0956a9779a6582d2a  |
++-----------+----------------------------+
+

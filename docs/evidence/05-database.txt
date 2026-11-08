@@ -1,0 +1,35 @@
+# Database host
+$ aws ec2 describe-instances --filters Name=tag:Name,Values=expense-tracker-mongodb Name=instance-state-name,Values=running --query Reservations[].Instances[].{Id:InstanceId,Type:InstanceType,PrivateIp:PrivateIpAddress,PublicIp:PublicIpAddress,Subnet:SubnetId,SG:SecurityGroups[0].GroupName} --output table
+
+-------------------------------------------
+|            DescribeInstances            |
++------------+----------------------------+
+|  Id        |  i-0add2e43aca2cdb53       |
+|  PrivateIp |  10.0.21.10                |
+|  PublicIp  |  None                      |
+|  SG        |  expense-tracker-db-sg     |
+|  Subnet    |  subnet-01e3c20a1fee3df8f  |
+|  Type      |  t3.small                  |
++------------+----------------------------+
+
+# Persistent EBS data volume
+$ aws ec2 describe-volumes --filters Name=tag:Name,Values=expense-tracker-db-data --query Volumes[].{Id:VolumeId,SizeGiB:Size,Type:VolumeType,Encrypted:Encrypted,State:State} --output table
+
+---------------------------------------------------------------------
+|                          DescribeVolumes                          |
++-----------+-------------------------+----------+---------+--------+
+| Encrypted |           Id            | SizeGiB  |  State  | Type   |
++-----------+-------------------------+----------+---------+--------+
+|  True     |  vol-0e6dbd315a567f465  |  20      |  in-use |  gp3   |
++-----------+-------------------------+----------+---------+--------+
+
+# S3 backup bucket
+$ aws s3api list-buckets --query Buckets[?starts_with(Name,`expense-tracker-db-backups`)].{Name:Name,Created:CreationDate} --output table
+
+----------------------------------------------------------------------
+|                             ListBuckets                            |
++---------+----------------------------------------------------------+
+|  Created|  2026-11-08T12:03:37+00:00                               |
+|  Name   |  expense-tracker-db-backups-20261108120337054900000003   |
++---------+----------------------------------------------------------+
+

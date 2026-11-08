@@ -1,0 +1,51 @@
+# Security group sg-05c3b6b9a2df92635
+$ aws ec2 describe-security-groups --group-ids sg-05c3b6b9a2df92635 --query SecurityGroups[].{Name:GroupName,Inbound:IpPermissions[].join(``,[to_string(FromPort),` from `,join(`,`,UserIdGroupPairs[].GroupId),join(`,`,IpRanges[].CidrIp)]),Outbound:IpPermissionsEgress[].join(``,[to_string(FromPort),` to `,join(`,`,UserIdGroupPairs[].GroupId),join(`,`,IpRanges[].CidrIp)])} --output yaml
+
+- Inbound:
+  - 80from 0.0.0.0/0
+  Name: expense-tracker-public-alb-sg
+  Outbound:
+  - 80to sg-0d5dac4a63e61fbda
+
+# Security group sg-0d5dac4a63e61fbda
+$ aws ec2 describe-security-groups --group-ids sg-0d5dac4a63e61fbda --query SecurityGroups[].{Name:GroupName,Inbound:IpPermissions[].join(``,[to_string(FromPort),` from `,join(`,`,UserIdGroupPairs[].GroupId),join(`,`,IpRanges[].CidrIp)]),Outbound:IpPermissionsEgress[].join(``,[to_string(FromPort),` to `,join(`,`,UserIdGroupPairs[].GroupId),join(`,`,IpRanges[].CidrIp)])} --output yaml
+
+- Inbound:
+  - 80from sg-05c3b6b9a2df92635
+  Name: expense-tracker-web-sg
+  Outbound:
+  - 80to sg-0279cad05236d734e
+  - 53to 10.0.0.0/16
+  - 443to 0.0.0.0/0
+
+# Security group sg-003a8974b3041a3bb
+$ aws ec2 describe-security-groups --group-ids sg-003a8974b3041a3bb --query SecurityGroups[].{Name:GroupName,Inbound:IpPermissions[].join(``,[to_string(FromPort),` from `,join(`,`,UserIdGroupPairs[].GroupId),join(`,`,IpRanges[].CidrIp)]),Outbound:IpPermissionsEgress[].join(``,[to_string(FromPort),` to `,join(`,`,UserIdGroupPairs[].GroupId),join(`,`,IpRanges[].CidrIp)])} --output yaml
+
+- Inbound:
+  - 27017from sg-0b30be4efcfac49ea
+  Name: expense-tracker-db-sg
+  Outbound:
+  - 53to 10.0.0.0/16
+  - 443to 0.0.0.0/0
+
+# Security group sg-0b30be4efcfac49ea
+$ aws ec2 describe-security-groups --group-ids sg-0b30be4efcfac49ea --query SecurityGroups[].{Name:GroupName,Inbound:IpPermissions[].join(``,[to_string(FromPort),` from `,join(`,`,UserIdGroupPairs[].GroupId),join(`,`,IpRanges[].CidrIp)]),Outbound:IpPermissionsEgress[].join(``,[to_string(FromPort),` to `,join(`,`,UserIdGroupPairs[].GroupId),join(`,`,IpRanges[].CidrIp)])} --output yaml
+
+- Inbound:
+  - 5000from sg-0279cad05236d734e
+  Name: expense-tracker-app-sg
+  Outbound:
+  - 27017to sg-003a8974b3041a3bb
+  - 53to 10.0.0.0/16
+  - 443to 0.0.0.0/0
+  - 587to 0.0.0.0/0
+
+# Security group sg-0279cad05236d734e
+$ aws ec2 describe-security-groups --group-ids sg-0279cad05236d734e --query SecurityGroups[].{Name:GroupName,Inbound:IpPermissions[].join(``,[to_string(FromPort),` from `,join(`,`,UserIdGroupPairs[].GroupId),join(`,`,IpRanges[].CidrIp)]),Outbound:IpPermissionsEgress[].join(``,[to_string(FromPort),` to `,join(`,`,UserIdGroupPairs[].GroupId),join(`,`,IpRanges[].CidrIp)])} --output yaml
+
+- Inbound:
+  - 80from sg-0d5dac4a63e61fbda
+  Name: expense-tracker-internal-alb-sg
+  Outbound:
+  - 5000to sg-0b30be4efcfac49ea
+

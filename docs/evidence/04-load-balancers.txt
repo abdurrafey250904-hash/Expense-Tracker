@@ -1,0 +1,36 @@
+# Load balancers
+$ aws elbv2 describe-load-balancers --names expense-tracker-public-alb expense-tracker-internal-alb --query LoadBalancers[].{Name:LoadBalancerName,Scheme:Scheme,DNS:DNSName,AZs:join(`,`,AvailabilityZones[].ZoneName)} --output table
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+|                                                                           DescribeLoadBalancers                                                                          |
++---------------------------------+------------------------------------------------------------------------------------+-------------------------------+-------------------+
+|               AZs               |                                        DNS                                         |             Name              |      Scheme       |
++---------------------------------+------------------------------------------------------------------------------------+-------------------------------+-------------------+
+|  ap-southeast-2b,ap-southeast-2a|  expense-tracker-public-alb-1866684008.ap-southeast-2.elb.amazonaws.com            |  expense-tracker-public-alb   |  internet-facing  |
+|  ap-southeast-2a,ap-southeast-2b|  internal-expense-tracker-internal-alb-540419039.ap-southeast-2.elb.amazonaws.com  |  expense-tracker-internal-alb |  internal         |
++---------------------------------+------------------------------------------------------------------------------------+-------------------------------+-------------------+
+
+# Target group expense-tracker-app-tg
+$ aws elbv2 describe-target-health --target-group-arn arn:aws:elasticloadbalancing:ap-southeast-2:017011573866:targetgroup/expense-tracker-app-tg/673d704e1c6e97c8 --query TargetHealthDescriptions[].{Target:Target.Id,Port:Target.Port,Health:TargetHealth.State} --output table
+
+--------------------------------------------
+|           DescribeTargetHealth           |
++----------+-------+-----------------------+
+|  Health  | Port  |        Target         |
++----------+-------+-----------------------+
+|  healthy |  5000 |  i-0c43edd33d95fee5d  |
+|  healthy |  5000 |  i-032140280261695cf  |
++----------+-------+-----------------------+
+
+# Target group expense-tracker-web-tg
+$ aws elbv2 describe-target-health --target-group-arn arn:aws:elasticloadbalancing:ap-southeast-2:017011573866:targetgroup/expense-tracker-web-tg/306b5916452e0685 --query TargetHealthDescriptions[].{Target:Target.Id,Port:Target.Port,Health:TargetHealth.State} --output table
+
+--------------------------------------------
+|           DescribeTargetHealth           |
++----------+-------+-----------------------+
+|  Health  | Port  |        Target         |
++----------+-------+-----------------------+
+|  healthy |  80   |  i-0bf2a750bbffb6c4e  |
+|  healthy |  80   |  i-09f63fef73f41a060  |
++----------+-------+-----------------------+
+

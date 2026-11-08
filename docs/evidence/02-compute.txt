@@ -1,0 +1,55 @@
+# EC2 instances
+$ aws ec2 describe-instances --filters Name=vpc-id,Values=vpc-06eeeb7fc00b7eee2 Name=instance-state-name,Values=running --query Reservations[].Instances[].{Name:Tags[?Key==`Name`]|[0].Value,Id:InstanceId,Type:InstanceType,AZ:Placement.AvailabilityZone,PrivateIp:PrivateIpAddress,PublicIp:PublicIpAddress} --output table
+
+-------------------------------------------------------------------------------------------------------------------
+|                                                DescribeInstances                                                |
++-----------------+----------------------+--------------------------+--------------+-----------------+------------+
+|       AZ        |         Id           |          Name            |  PrivateIp   |    PublicIp     |   Type     |
++-----------------+----------------------+--------------------------+--------------+-----------------+------------+
+|  ap-southeast-2b|  i-0bf2a750bbffb6c4e |  expense-tracker-web     |  10.0.2.28   |  15.135.68.218  |  t3.micro  |
+|  ap-southeast-2b|  i-0c43edd33d95fee5d |  expense-tracker-app     |  10.0.12.177 |  None           |  t3.micro  |
+|  ap-southeast-2a|  i-0add2e43aca2cdb53 |  expense-tracker-mongodb |  10.0.21.10  |  None           |  t3.small  |
+|  ap-southeast-2a|  i-032140280261695cf |  expense-tracker-app     |  10.0.11.135 |  None           |  t3.micro  |
+|  ap-southeast-2a|  i-09f63fef73f41a060 |  expense-tracker-web     |  10.0.1.36   |  52.62.101.167  |  t3.micro  |
++-----------------+----------------------+--------------------------+--------------+-----------------+------------+
+
+# Auto Scaling Groups
+$ aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names expense-tracker-web-asg expense-tracker-app-asg --query AutoScalingGroups[].{Name:AutoScalingGroupName,Min:MinSize,Desired:DesiredCapacity,Max:MaxSize,HealthCheck:HealthCheckType,InService:length(Instances[?LifecycleState==`InService`])} --output table
+
+----------------------------------------------------------------------------------
+|                            DescribeAutoScalingGroups                           |
++---------+--------------+------------+------+------+----------------------------+
+| Desired | HealthCheck  | InService  | Max  | Min  |           Name             |
++---------+--------------+------------+------+------+----------------------------+
+|  2      |  ELB         |  2         |  4   |  2   |  expense-tracker-app-asg   |
+|  2      |  ELB         |  2         |  4   |  2   |  expense-tracker-web-asg   |
++---------+--------------+------------+------+------+----------------------------+
+
+# Scaling policies
+$ aws autoscaling describe-policies --query ScalingPolicies[?starts_with(AutoScalingGroupName,`expense`)].{ASG:AutoScalingGroupName,Policy:PolicyName,Metric:TargetTrackingConfiguration.PredefinedMetricSpecification.PredefinedMetricType,Target:TargetTrackingConfiguration.TargetValue} --output table
+
+---------------------------------------------------------------------------------------------------------
+|                                           DescribePolicies                                            |
++-------------------------+----------------------------+--------------------------------------+---------+
+|           ASG           |          Metric            |               Policy                 | Target  |
++-------------------------+----------------------------+--------------------------------------+---------+
+|  expense-tracker-app-asg|  ASGAverageCPUUtilization  |  expense-tracker-app-cpu-target      |  50.0   |
+|  expense-tracker-web-asg|  ASGAverageCPUUtilization  |  expense-tracker-web-cpu-target      |  50.0   |
+|  expense-tracker-web-asg|  ALBRequestCountPerTarget  |  expense-tracker-web-request-target  |  1000.0 |
++-------------------------+----------------------------+--------------------------------------+---------+
+
+# Running containers (via SSM)
+$ aws ssm describe-instance-information --query InstanceInformationList[].{Id:InstanceId,Ping:PingStatus,Ip:IPAddress,Platform:PlatformName} --output table
+
+------------------------------------------------------------------
+|                   DescribeInstanceInformation                  |
++----------------------+--------------+---------+----------------+
+|          Id          |     Ip       |  Ping   |   Platform     |
++----------------------+--------------+---------+----------------+
+|  i-0add2e43aca2cdb53 |  10.0.21.10  |  Online |  Amazon Linux  |
+|  i-0bf2a750bbffb6c4e |  10.0.2.28   |  Online |  Amazon Linux  |
+|  i-032140280261695cf |  10.0.11.135 |  Online |  Amazon Linux  |
+|  i-0c43edd33d95fee5d |  10.0.12.177 |  Online |  Amazon Linux  |
+|  i-09f63fef73f41a060 |  10.0.1.36   |  Online |  Amazon Linux  |
++----------------------+--------------+---------+----------------+
+

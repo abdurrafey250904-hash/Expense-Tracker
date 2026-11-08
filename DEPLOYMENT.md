@@ -3,7 +3,7 @@
 **Course:** Cloud Computing (SE-490) — Complex Engineering Activity
 **Cloud provider:** Amazon Web Services, region **ap-southeast-2 (Sydney)**
 **Repository:** https://github.com/abdurrafey250904-hash/Expense-Tracker
-**Live URL:** __APP_URL__
+**Live URL:** http://expense-tracker-public-alb-1866684008.ap-southeast-2.elb.amazonaws.com
 
 This file records every step taken to containerize, deploy and automate the three-tier
 Expense Tracker, with a one-line explanation of each step, followed by the evidence
@@ -171,7 +171,7 @@ for `/api/*` Nginx proxies → internal ALB → app container (Express) → Mong
 ### Phase G — Verification
 | # | Step | One-line explanation |
 |---|---|---|
-| G1 | Opened __APP_URL__ in a browser, registered, added expenses, viewed reports | End-to-end proof the running application works through all three tiers. |
+| G1 | Opened http://expense-tracker-public-alb-1866684008.ap-southeast-2.elb.amazonaws.com in a browser, registered, added expenses, viewed reports | End-to-end proof the running application works through all three tiers. |
 | G2 | Checked both target groups show **healthy** targets | Load balancers see every instance as healthy. |
 | G3 | Checked CloudWatch log groups `/expense-tracker/web` and `/expense-tracker/app` | Container logs arrive centrally. |
 | G4 | Every later `git push` to `main` re-runs the pipeline | Continuous delivery: change → test → image → deploy without manual steps. |
@@ -180,19 +180,64 @@ for `/api/*` Nginx proxies → internal ALB → app container (Express) → Mong
 
 ## 3. Screenshot checklist (Deployment Evidence)
 
-All in the AWS Console with region **Asia Pacific (Sydney) ap-southeast-2** selected.
+### 3a. Already captured (in this repo)
+| Evidence | File |
+|---|---|
+| Architecture diagram (rendered) | `docs/architecture-diagram.png` |
+| CI/CD pipeline run #2 — all 7 jobs green | `docs/screenshots/07-cicd-pipeline-run.png` |
+| Running app via browser — login, dashboard, expenses, reports, budget | `docs/screenshots/08a … 08e-*.png` |
+| Live `/api/health` (deployed SHA + `db: connected`) | `docs/screenshots/08f-api-health.png` |
+| CLI exports: VPC/subnets/routes/IGW/NAT, instances/ASGs/policies, all security groups, ALBs + target health, DB host/EBS/S3, ECR image list, secrets/SSM/log groups/alarms | `docs/evidence/01 … 09-*.txt` (regenerate: `bash scripts/collect-evidence.sh`) |
+| Security boundary tests (direct web IP blocked, internal ALB private, no public IPs on app/DB) + S3 backup listing | `docs/evidence/10-security-and-backup-tests.txt` |
+
+### 3b. To capture in the AWS Console (requires your login)
+All with region **Asia Pacific (Sydney) ap-southeast-2** selected (top-right).
 
 | # | Evidence required | Where to click |
 |---|---|---|
-| 1 | Network/VPC + subnets | **VPC → Your VPCs** (`expense-tracker-vpc`); **Subnets** (filter `expense-tracker` – 6 subnets); **Route tables** (public → igw, private-app → nat, private-db → local only); **NAT gateways**; **Internet gateways** |
+| 1 | Network/VPC + subnets | **VPC → Your VPCs** (`expense-tracker-vpc`); **Subnets** (filter `expense-tracker` – 6 subnets); **Route tables** (public → igw, private-app → nat, private-db → nat); **NAT gateways**; **Internet gateways** |
 | 2 | Compute instances / container hosts | **EC2 → Instances** (4 running: 2 × `expense-tracker-web`, 2 × `expense-tracker-app`); **EC2 → Auto Scaling Groups** (both ASGs, *Automatic scaling* tab shows the policies) |
 | 3 | Security groups | **EC2 → Security Groups** → open each of the 5 `expense-tracker-*-sg` → *Inbound rules* (show source = other SG) |
 | 4 | Load balancer | **EC2 → Load Balancers** (public + internal); **Target Groups** → `expense-tracker-web-tg` / `-app-tg` → *Targets* tab all **healthy** |
 | 5 | Database instance | **EC2 → Instances → `expense-tracker-mongodb`** (private IP 10.0.21.10, no public IP, subnet `private-db`, SG `expense-tracker-db-sg`); **EC2 → Volumes → `expense-tracker-db-data`** (encrypted, in-use); **S3 → `expense-tracker-db-backups-…`** |
 | 6 | Docker image build + registry listing | **ECR → Repositories** → both repos → image list with SHA tags + scan status; plus the *Build & push* job log in GitHub Actions |
 | 7 | CI/CD pipeline run | GitHub repo → **Actions → CI/CD** → green run showing all 7 jobs (tests → integration → build & push → deploy) |
-| 8 | Running application | Browser at __APP_URL__ — login page, dashboard with charts, reports page |
+| 8 | Running application | Browser at http://expense-tracker-public-alb-1866684008.ap-southeast-2.elb.amazonaws.com — login page, dashboard with charts, reports page |
 | + | Extras (strengthen report) | **Secrets Manager** → `expense-tracker/app` (value hidden); **CloudWatch → Dashboards → expense-tracker**; **CloudWatch → Log groups**; **Systems Manager → Run Command → Command history** (deploy commands from CI) |
+
+### 3c. CEA requirement compliance check
+
+| Brief item | Status | Where it is satisfied |
+|---|---|---|
+| 1 VPC with CIDR | ✅ | `10.0.0.0/16` — `vpc.tf` |
+| 1 Public subnets | ✅ | 2 × public, 2 AZs |
+| 1 Private subnets | ✅ | 2 × private-app + 2 × private-db |
+| 1 Internet Gateway | ✅ | `expense-tracker-igw` |
+| 1 Route tables | ✅ | public → IGW, private-app → NAT, private-db → NAT (outbound only) |
+| 1 NAT gateway | ✅ | `expense-tracker-nat` (private hosts pull images / secrets / patches) |
+| 2 Web tier Docker container, well-structured Dockerfile, public via browser/LB | ✅ | `frontend/Dockerfile` (multi-stage, non-root); public ALB → web ASG in public subnets |
+| 3 App tier Docker container + Dockerfile + docker-compose | ✅ | `backend/Dockerfile`, `docker-compose.yml`; private subnets; reachable only via internal ALB whose SG only admits the web SG |
+| 4 Managed DB **or properly secured self-managed DB**, never public | ✅ (self-managed) | MongoDB 7 on EC2 in private-db subnet, no public IP, SG 27017 from app SG only, auth on, encrypted EBS, S3 backups (managed DocumentDB/RDS denied by the account SCP — see D8) |
+| 5 Push images to a registry | ✅ | Amazon ECR `expense-tracker-web`, `expense-tracker-app` (SHA tags, scan on push) |
+| 6 CI/CD builds, tests, pushes, deploys on every change | ✅ | `.github/workflows/ci-cd.yml` — run #2 all green |
+| 7 Load balancer | ✅ | Public ALB + internal ALB |
+| 7 Target groups | ✅ | `expense-tracker-web-tg`, `expense-tracker-app-tg` (health checks) |
+| 7 Auto Scaling Groups | ✅ | web + app ASGs, min 2 / max 4, CPU and request-count target tracking |
+| 8 SGs per tier | ✅ | 5 chained SGs |
+| 8 Network segmentation | ✅ | public / private-app / private-db subnets |
+| 8 Least privilege inter-tier | ✅ | SG-to-SG references only; per-tier IAM roles |
+| 8 Secrets management incl. CI/CD secrets | ✅ | Secrets Manager (app + db); GitHub encrypted secrets for the scoped CI user |
+| 9 Enhancement — object storage | ✅ | S3 backup bucket with daily `mongodump` |
+| 9 Enhancement — persistent block storage | ✅ | Separate encrypted 20 GB EBS data volume for MongoDB |
+| 9 Enhancement — centralized logging/monitoring | ✅ | CloudWatch log groups (web/app/db), alarms, dashboard |
+| 9 Enhancement — infrastructure as code | ✅ | Terraform `infra/terraform/` |
+| 9 Enhancement — cost estimate + ≥2 optimizations | ✅ | Section 6 (confirm figures with calculator.aws) |
+| 9 Enhancement — Kubernetes | ➖ not chosen | (optional; only one enhancement required) |
+| 10 NFR justification incl. limitations | ✅ | Section 5 |
+| Deliverable 1 Architecture diagram | ✅ | `docs/architecture-diagram.png` (+ Mermaid source in section 1) |
+| Deliverable 2 Screenshots | 🟡 partly | App + pipeline captured (3a); AWS Console screenshots to take (3b) |
+| Deliverable 3 Source files + repo link | ✅ | Dockerfiles, compose, workflow, Terraform — https://github.com/abdurrafey250904-hash/Expense-Tracker |
+| Deliverable 4 Technical report (4–6 pages) | 🟡 to write | Sections 0–6 of this file contain the material for every required report section |
 
 ---
 

@@ -1,0 +1,27 @@
+# Security boundary tests (run from the public internet, 2026-11-08T12:36:28Z)
+
+## 1. Public ALB serves the app (expected: 200)
+$ curl -o /dev/null -w '%{http_code}' http://expense-tracker-public-alb-1866684008.ap-southeast-2.elb.amazonaws.com/
+200
+
+## 2. Live health through all three tiers (expected: db connected + deployed git SHA)
+$ curl http://expense-tracker-public-alb-1866684008.ap-southeast-2.elb.amazonaws.com/api/health
+{"status":"ok","db":"connected","version":"446e4b044813bbf8c06d266df1f43b2ffe4188cb","timestamp":"2026-11-08T12:36:16.993Z"}
+
+## 3. Bypassing the ALB to hit a web instance directly (expected: blocked by web SG -> timeout, code 000)
+$ curl -m 8 http://15.135.68.218/
+000
+
+## 4. Internal ALB is not internet-facing (expected: resolves to private 10.0.x.x addresses only)
+Name:    internal-expense-tracker-internal-alb-540419039.ap-southeast-2.elb.amazonaws.com
+Addresses:  10.0.12.204
+	  10.0.11.45
+
+
+## 5. App and DB hosts have no public IP (expected: None)
+expense-tracker-app	10.0.12.177	None
+expense-tracker-mongodb	10.0.21.10	None
+expense-tracker-app	10.0.11.135	None
+
+## 6. Database backup in S3 (object storage)
+2026-11-08 17:31:40       1216 2026-11-08T123138Z.archive.gz
