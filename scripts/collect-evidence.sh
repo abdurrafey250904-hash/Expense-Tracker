@@ -13,7 +13,7 @@ run() { # run <file> <title> <aws args...>
   local f="$OUT/$1" t="$2"; shift 2
   { echo "# $t"; echo "\$ aws $*"; echo; aws "$@" 2>&1; echo; } >> "$f"
 }
-rm -f "$OUT"/*.txt
+rm -f "$OUT"/0[1-6]-*.txt "$OUT"/09-*.txt   # only the files this script writes
 
 run 01-network.txt "VPC" ec2 describe-vpcs --vpc-ids "$VPC" --query 'Vpcs[].{VpcId:VpcId,Cidr:CidrBlock,Name:Tags[?Key==`Name`]|[0].Value}' --output table
 run 01-network.txt "Subnets" ec2 describe-subnets --filters Name=vpc-id,Values="$VPC" --query 'sort_by(Subnets,&CidrBlock)[].{Name:Tags[?Key==`Name`]|[0].Value,Cidr:CidrBlock,AZ:AvailabilityZone,PublicIpOnLaunch:MapPublicIpOnLaunch}' --output table

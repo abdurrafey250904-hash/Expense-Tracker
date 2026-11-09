@@ -1,0 +1,42 @@
+# Docker image build & push to Amazon ECR — tier: app
+# GitHub Actions run 42481109042 (commit 2127e96), job 128733270120
+# https://github.com/abdurrafey250904-hash/Expense-Tracker/actions/runs/42481109042/job/128733270120
+
+2026-11-08T12:38:36.0489883Z #1 [internal] load build definition from Dockerfile
+2026-11-08T12:38:36.0491208Z #1 DONE 0.0s
+2026-11-08T12:38:36.0491598Z #2 [auth] library/node:pull token for registry-1.docker.io
+2026-11-08T12:38:36.0492043Z #2 DONE 0.0s
+2026-11-08T12:38:36.0492884Z #3 [internal] load metadata for docker.io/library/node:20-alpine
+2026-11-08T12:38:36.3062592Z #3 DONE 0.5s
+2026-11-08T12:38:36.5293462Z #4 [internal] load .dockerignore
+2026-11-08T12:38:36.5294482Z #4 DONE 0.0s
+2026-11-08T12:38:36.5294773Z #5 [internal] load build context
+2026-11-08T12:38:36.5295108Z #5 DONE 0.0s
+2026-11-08T12:38:36.5295795Z #6 [deps 1/4] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+2026-11-08T12:38:36.5297706Z #6 DONE 0.0s
+2026-11-08T12:38:36.5298448Z #7 [runtime 3/5] ADD --chmod=644 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/certs/global-bundle.pem
+2026-11-08T12:38:36.5299262Z #7 DONE 0.1s
+2026-11-08T12:38:36.5395770Z #8 DONE 0.2s
+2026-11-08T12:38:36.6520845Z #5 [internal] load build context
+2026-11-08T12:38:36.6528409Z #5 DONE 0.0s
+2026-11-08T12:38:36.6530553Z #9 [runtime 4/5] COPY --from=deps /app/node_modules ./node_modules
+2026-11-08T12:38:36.6532564Z #10 [deps 2/4] WORKDIR /app
+2026-11-08T12:38:36.6534688Z #11 [runtime 3/5] ADD --chmod=644 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/certs/global-bundle.pem
+2026-11-08T12:38:36.6536965Z #12 [deps 3/4] COPY package.json package-lock.json ./
+2026-11-08T12:38:36.6538714Z #13 [deps 4/4] RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
+2026-11-08T12:38:36.6540896Z #14 [runtime 5/5] COPY --chown=node:node . .
+2026-11-08T12:38:36.8763402Z #15 exporting to image
+2026-11-08T12:38:36.8763750Z #15 exporting layers done
+2026-11-08T12:38:36.8764328Z #15 exporting manifest sha256:64a120f28d8e4989887a958a7ad983bf7efe4eacb3404f9d08d0e456174ada06 done
+2026-11-08T12:38:36.8765205Z #15 exporting config sha256:a85031196ae9334be547f6dff7418d41ff1e333f658e370899a6480d90edc966 done
+2026-11-08T12:38:36.8765804Z #15 pushing layers
+2026-11-08T12:38:37.4371015Z #16 [auth] sharing credentials for 017011573866.dkr.ecr.ap-southeast-2.amazonaws.com
+2026-11-08T12:38:37.4371610Z #16 DONE 0.0s
+2026-11-08T12:38:37.5385569Z #17 exporting to GitHub Actions Cache
+2026-11-08T12:38:37.5388100Z #17 DONE 0.9s
+2026-11-08T12:38:37.5388605Z #15 exporting to image
+2026-11-08T12:38:38.2913457Z #15 pushing layers 1.6s done
+2026-11-08T12:38:38.2916002Z #15 pushing manifest for 017011573866.dkr.ecr.ap-southeast-2.amazonaws.com/expense-tracker-app:2127e9618cabb98759d32305cf98e3c4b29181a3@sha256:64a120f28d8e4989887a958a7ad983bf7efe4eacb3404f9d08d0e456174ada06
+2026-11-08T12:38:38.8870663Z #15 pushing manifest for 017011573866.dkr.ecr.ap-southeast-2.amazonaws.com/expense-tracker-app:2127e9618cabb98759d32305cf98e3c4b29181a3@sha256:64a120f28d8e4989887a958a7ad983bf7efe4eacb3404f9d08d0e456174ada06 0.6s done
+2026-11-08T12:38:38.8872715Z #15 DONE 2.2s
+2026-11-08T12:38:38.9101988Z #18 DONE 0.0s

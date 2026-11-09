@@ -175,35 +175,30 @@ for `/api/*` Nginx proxies → internal ALB → app container (Express) → Mong
 | G2 | Checked both target groups show **healthy** targets | Load balancers see every instance as healthy. |
 | G3 | Checked CloudWatch log groups `/expense-tracker/web` and `/expense-tracker/app` | Container logs arrive centrally. |
 | G4 | Every later `git push` to `main` re-runs the pipeline | Continuous delivery: change → test → image → deploy without manual steps. |
+| G5 | Ran security boundary tests from the internet and a manual `mongodb-backup` via SSM | Proved the web instances are only reachable through the ALB, the app/DB hosts have no public IP, and backups land in S3. |
+| G6 | Captured app + pipeline screenshots with headless Edge, and AWS Console screenshots in Sydney | Evidence for every item the brief lists (index in section 3). |
+| G7 | Exported AWS CLI evidence (`scripts/collect-evidence.sh`) and the Docker build-and-push logs from GitHub Actions | Full-detail, reproducible proof that backs up each screenshot. |
 
 ---
 
-## 3. Screenshot checklist (Deployment Evidence)
+## 3. Deployment evidence (screenshots + CLI exports)
 
-### 3a. Already captured (in this repo)
-| Evidence | File |
-|---|---|
-| Architecture diagram (rendered) | `docs/architecture-diagram.png` |
-| CI/CD pipeline run #2 — all 7 jobs green | `docs/screenshots/07-cicd-pipeline-run.png` |
-| Running app via browser — login, dashboard, expenses, reports, budget | `docs/screenshots/08a … 08e-*.png` |
-| Live `/api/health` (deployed SHA + `db: connected`) | `docs/screenshots/08f-api-health.png` |
-| CLI exports: VPC/subnets/routes/IGW/NAT, instances/ASGs/policies, all security groups, ALBs + target health, DB host/EBS/S3, ECR image list, secrets/SSM/log groups/alarms | `docs/evidence/01 … 09-*.txt` (regenerate: `bash scripts/collect-evidence.sh`) |
-| Security boundary tests (direct web IP blocked, internal ALB private, no public IPs on app/DB) + S3 backup listing | `docs/evidence/10-security-and-backup-tests.txt` |
+All AWS Console screenshots were taken in region **Asia Pacific (Sydney) ap-southeast-2**.
+CLI exports (`docs/evidence/`) are read-only AWS CLI output and back up every screenshot with full detail
+(regenerate with `bash scripts/collect-evidence.sh`).
 
-### 3b. To capture in the AWS Console (requires your login)
-All with region **Asia Pacific (Sydney) ap-southeast-2** selected (top-right).
-
-| # | Evidence required | Where to click |
+| Brief evidence item | Screenshots (`docs/screenshots/`) | Supporting CLI evidence (`docs/evidence/`) |
 |---|---|---|
-| 1 | Network/VPC + subnets | **VPC → Your VPCs** (`expense-tracker-vpc`); **Subnets** (filter `expense-tracker` – 6 subnets); **Route tables** (public → igw, private-app → nat, private-db → nat); **NAT gateways**; **Internet gateways** |
-| 2 | Compute instances / container hosts | **EC2 → Instances** (4 running: 2 × `expense-tracker-web`, 2 × `expense-tracker-app`); **EC2 → Auto Scaling Groups** (both ASGs, *Automatic scaling* tab shows the policies) |
-| 3 | Security groups | **EC2 → Security Groups** → open each of the 5 `expense-tracker-*-sg` → *Inbound rules* (show source = other SG) |
-| 4 | Load balancer | **EC2 → Load Balancers** (public + internal); **Target Groups** → `expense-tracker-web-tg` / `-app-tg` → *Targets* tab all **healthy** |
-| 5 | Database instance | **EC2 → Instances → `expense-tracker-mongodb`** (private IP 10.0.21.10, no public IP, subnet `private-db`, SG `expense-tracker-db-sg`); **EC2 → Volumes → `expense-tracker-db-data`** (encrypted, in-use); **S3 → `expense-tracker-db-backups-…`** |
-| 6 | Docker image build + registry listing | **ECR → Repositories** → both repos → image list with SHA tags + scan status; plus the *Build & push* job log in GitHub Actions |
-| 7 | CI/CD pipeline run | GitHub repo → **Actions → CI/CD** → green run showing all 7 jobs (tests → integration → build & push → deploy) |
-| 8 | Running application | Browser at http://expense-tracker-public-alb-1866684008.ap-southeast-2.elb.amazonaws.com — login page, dashboard with charts, reports page |
-| + | Extras (strengthen report) | **Secrets Manager** → `expense-tracker/app` (value hidden); **CloudWatch → Dashboards → expense-tracker**; **CloudWatch → Log groups**; **Systems Manager → Run Command → Command history** (deploy commands from CI) |
+| **1. Network / VPC and subnets** | `01a-vpc.png` (VPC `10.0.0.0/16`) · `01b-subnets.png` (6 subnets, 2 AZs) · `01c-route-public.png` (`0.0.0.0/0 → igw`) · `01c-route-private.png` (`0.0.0.0/0 → nat`) · `01d-internet-gateway.png` (Attached) · `01d-nat-gateway.png` (Available) | `01-network.txt` |
+| **2. Compute instances / container hosts** | `02a-ec2-instances.png` (5 running) · `02b-autoscaling-groups.png` (web + app, 2/2 healthy, min 2 / max 4) · `02c-autoscaling-policies.png` (CPU 50 % + 1000 req/target) | `02-compute.txt` (full instance names, private/public IPs, scaling policies) |
+| **3. Security groups / firewall rules** | `03a-security-groups.png` (5 SGs) · `03b-sg-app-inbound.png` (TCP 5000) · `03c-sg-db-inbound.png` (TCP 27017) | `03-security-groups.txt` — shows the **source** of each rule: app 5000 ← internal-ALB SG, DB 27017 ← app SG, etc. |
+| **4. Load balancer configuration** | `04a-load-balancers.png` (Internal + Internet-facing, Active) · `04b-target-group-web.png` (2 × healthy :80) · `04c-target-group-app.png` (2 × healthy :5000) | `04-load-balancers.txt` |
+| **5. Database instance** | `05a-database-instance.png` (`expense-tracker-mongodb`, private 10.0.21.10, **no public IP**) · `05b-database-storage.png` | `05-database.txt` (20 GiB **encrypted** gp3 data volume in-use, S3 backup bucket) · `10-security-and-backup-tests.txt` (backup object in S3) |
+| **6. Docker image build and registry listing** | `06a-ecr-repositories.png` (2 private repos, immutable, AES-256) · `06b-ecr-images.png` (3 images tagged with commit SHAs) | `06c-docker-build-log-app.txt`, `06c-docker-build-log-web.txt` (BuildKit build + `pushing manifest … ecr … done`) · `06-ecr.txt` |
+| **7. CI/CD pipeline run** | `07-cicd-pipeline-run.png` (all 7 jobs green) | Runs #2 and #3 green: https://github.com/abdurrafey250904-hash/Expense-Tracker/actions |
+| **8. Running application in a browser** | `08a-app-login-page.png` · `08b-app-dashboard.png` · `08c-app-expenses.png` · `08d-app-reports.png` · `08e-app-budget.png` · `08f-api-health.png` | `10-security-and-backup-tests.txt` (HTTP 200 + health) |
+| Architecture diagram | `docs/architecture-diagram.png` | Mermaid source in section 1 |
+| Security boundary tests | — | `10-security-and-backup-tests.txt` (direct hit on a web instance blocked, internal ALB resolves to private IPs only, app/DB have no public IP) |
 
 ### 3c. CEA requirement compliance check
 
@@ -235,7 +230,7 @@ All with region **Asia Pacific (Sydney) ap-southeast-2** selected (top-right).
 | 9 Enhancement — Kubernetes | ➖ not chosen | (optional; only one enhancement required) |
 | 10 NFR justification incl. limitations | ✅ | Section 5 |
 | Deliverable 1 Architecture diagram | ✅ | `docs/architecture-diagram.png` (+ Mermaid source in section 1) |
-| Deliverable 2 Screenshots | 🟡 partly | App + pipeline captured (3a); AWS Console screenshots to take (3b) |
+| Deliverable 2 Screenshots | ✅ | All 8 required evidence items captured — index in section 3 |
 | Deliverable 3 Source files + repo link | ✅ | Dockerfiles, compose, workflow, Terraform — https://github.com/abdurrafey250904-hash/Expense-Tracker |
 | Deliverable 4 Technical report (4–6 pages) | 🟡 to write | Sections 0–6 of this file contain the material for every required report section |
 

@@ -1,0 +1,50 @@
+# Docker image build & push to Amazon ECR — tier: web
+# GitHub Actions run 42481109042 (commit 2127e96), job 128733270118
+# https://github.com/abdurrafey250904-hash/Expense-Tracker/actions/runs/42481109042/job/128733270118
+
+2026-11-08T12:38:37.8225961Z #1 [internal] load build definition from Dockerfile
+2026-11-08T12:38:37.8226764Z #1 DONE 0.0s
+2026-11-08T12:38:37.8227008Z #2 [internal] load metadata for docker.io/library/node:20-alpine
+2026-11-08T12:38:38.0383414Z #3 [auth] nginxinc/nginx-unprivileged:pull token for registry-1.docker.io
+2026-11-08T12:38:38.0383783Z #3 DONE 0.0s
+2026-11-08T12:38:38.0384021Z #4 [auth] library/node:pull token for registry-1.docker.io
+2026-11-08T12:38:38.0384280Z #4 DONE 0.0s
+2026-11-08T12:38:38.1885812Z #5 [internal] load metadata for docker.io/nginxinc/nginx-unprivileged:1.27-alpine
+2026-11-08T12:38:38.5076502Z #2 [internal] load metadata for docker.io/library/node:20-alpine
+2026-11-08T12:38:38.5076949Z #2 DONE 0.8s
+2026-11-08T12:38:38.6747935Z #5 [internal] load metadata for docker.io/nginxinc/nginx-unprivileged:1.27-alpine
+2026-11-08T12:38:38.6748371Z #5 DONE 0.8s
+2026-11-08T12:38:38.6748584Z #6 [internal] load .dockerignore
+2026-11-08T12:38:38.6749079Z #6 DONE 0.0s
+2026-11-08T12:38:38.6749273Z #7 [internal] load build context
+2026-11-08T12:38:38.6749490Z #7 DONE 0.0s
+2026-11-08T12:38:38.6749896Z #8 [build 1/6] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+2026-11-08T12:38:38.6750947Z #8 DONE 0.0s
+2026-11-08T12:38:38.6751385Z #9 [runtime 1/3] FROM docker.io/nginxinc/nginx-unprivileged:1.27-alpine@sha256:65e3e85dbaed8ba248841d9d58a899b6197106c23cb0ff1a132b7bfe0547e4c0
+2026-11-08T12:38:38.6752560Z #9 DONE 0.0s
+2026-11-08T12:38:39.0219302Z #10 DONE 0.5s
+2026-11-08T12:38:39.1939980Z #7 [internal] load build context
+2026-11-08T12:38:39.1940869Z #7 DONE 0.0s
+2026-11-08T12:38:39.1941136Z #11 [build 5/6] COPY . .
+2026-11-08T12:38:39.1941714Z #12 [build 6/6] RUN npm run build
+2026-11-08T12:38:39.1942490Z #13 [runtime 2/3] COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
+2026-11-08T12:38:39.1943297Z #14 [build 2/6] WORKDIR /app
+2026-11-08T12:38:39.1943861Z #15 [build 3/6] COPY package.json package-lock.json ./
+2026-11-08T12:38:39.1944332Z #16 [build 4/6] RUN npm ci --no-audit --no-fund
+2026-11-08T12:38:39.1945234Z #17 [runtime 3/3] COPY --from=build /app/dist /usr/share/nginx/html
+2026-11-08T12:38:39.4225198Z #18 exporting to image
+2026-11-08T12:38:39.4225570Z #18 exporting layers done
+2026-11-08T12:38:39.4226717Z #18 exporting manifest sha256:1c210269a9db50401e397afeaa6c22f502fe07210fb1625a8184523a1f694222 0.1s done
+2026-11-08T12:38:39.4227605Z #18 exporting config sha256:8a04f86140d8cfb5b8e6e6de74f65cb517fcd203f70998a08c3605f9013d0dd8
+2026-11-08T12:38:39.5696541Z #18 exporting config sha256:8a04f86140d8cfb5b8e6e6de74f65cb517fcd203f70998a08c3605f9013d0dd8 done
+2026-11-08T12:38:39.5697245Z #18 pushing layers
+2026-11-08T12:38:40.0664490Z #19 [auth] sharing credentials for 017011573866.dkr.ecr.ap-southeast-2.amazonaws.com
+2026-11-08T12:38:40.0664879Z #19 DONE 0.0s
+2026-11-08T12:38:40.2165945Z #20 exporting to GitHub Actions Cache
+2026-11-08T12:38:41.3350845Z #18 exporting to image
+2026-11-08T12:38:41.3351198Z #18 pushing layers 1.4s done
+2026-11-08T12:38:41.3351916Z #18 pushing manifest for 017011573866.dkr.ecr.ap-southeast-2.amazonaws.com/expense-tracker-web:2127e9618cabb98759d32305cf98e3c4b29181a3@sha256:1c210269a9db50401e397afeaa6c22f502fe07210fb1625a8184523a1f694222 0.5s done
+2026-11-08T12:38:41.3352606Z #18 DONE 2.0s
+2026-11-08T12:38:41.4855227Z #20 exporting to GitHub Actions Cache
+2026-11-08T12:38:41.7799098Z #20 DONE 2.4s
+2026-11-08T12:38:41.8013478Z #21 DONE 0.0s
