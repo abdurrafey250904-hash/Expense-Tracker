@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CEA Technical Report - Three-Tier Expense Tracker on AWS</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Calibri, Arial, sans-serif; font-size: 10pt; line-height: 1.38; color: #1a1a1a; margin: 0; }
+  h1 { font-size: 15pt; color: #0b3d6e; border-bottom: 2px solid #0b3d6e; padding-bottom: 3px; margin: 16px 0 8px; page-break-after: avoid; }
+  h2 { font-size: 11.5pt; color: #0b3d6e; margin: 12px 0 5px; page-break-after: avoid; }
+  p { margin: 0 0 7px; text-align: justify; }
+  ul { margin: 0 0 7px 0; padding-left: 18px; }
+  li { margin-bottom: 2px; }
+  code { font-family: Consolas, "Courier New", monospace; font-size: 8.8pt; background: #f1f3f5; padding: 0 3px; border-radius: 2px; }
+  table { width: 100%; border-collapse: collapse; margin: 4px 0 10px; font-size: 8.9pt; page-break-inside: auto; }
+  tr { page-break-inside: avoid; }
+  th { background: #0b3d6e; color: #fff; text-align: left; padding: 4px 6px; font-weight: 600; }
+  td { border: 1px solid #c9d3de; padding: 3px 6px; vertical-align: top; }
+  tr:nth-child(even) td { background: #f6f8fb; }
+  figure { margin: 6px 0 12px; text-align: center; page-break-inside: avoid; }
+  figure img { max-width: 100%; max-height: 205mm; border: 1px solid #c9d3de; }
+  figcaption { font-size: 8.6pt; color: #444; margin-top: 3px; font-style: italic; }
+  .cover { height: 255mm; display: flex; flex-direction: column; justify-content: center; text-align: center; page-break-after: always; }
+  .cover .course { font-size: 12pt; color: #333; margin-bottom: 4px; }
+  .cover h1.title { font-size: 22pt; border: none; color: #0b3d6e; margin: 26px 0 8px; line-height: 1.25; }
+  .cover .sub { font-size: 12.5pt; color: #333; margin-bottom: 40px; }
+  .cover table { width: 70%; margin: 0 auto; font-size: 10.5pt; }
+  .cover td { border: none; border-bottom: 1px solid #dde3ea; padding: 6px 8px; text-align: left; background: none !important; }
+  .cover td:first-child { font-weight: 600; width: 38%; color: #0b3d6e; }
+  .pb { page-break-before: always; }
+  .note { border-left: 3px solid #0b3d6e; background: #eef4fa; padding: 5px 8px; margin: 6px 0 9px; font-size: 9.4pt; }
+  .ok { color: #137333; font-weight: 600; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .grid2 figure img { max-height: 95mm; }
+</style>
+</head>
+<body>
+
+<!-- ============================== COVER ============================== -->
+<section class="cover">
+  <div class="course">Department of Software Engineering</div>
+  <div class="course">Cloud Computing (SE-490) - Complex Engineering Activity (CEA)</div>
+  <h1 class="title">Design, Deployment and Cloud-Native Enhancement<br>of a Three-Tier Web Application</h1>
+  <div class="sub">Technical Report - Personal Expense Tracker on Amazon Web Services</div>
+  <table>
+    <tr><td>Submitted by</td><td>Abdur Rafey</td></tr>
+    <tr><td>Cloud provider</td><td>Amazon Web Services (AWS), region ap-southeast-2 (Sydney)</td></tr>
+    <tr><td>Live application</td><td>http://expense-tracker-public-alb-1866684008.ap-southeast-2.elb.amazonaws.com</td></tr>
+    <tr><td>Source repository</td><td>https://github.com/abdurrafey250904-hash/Expense-Tracker</td></tr>
+    <tr><td>CI/CD</td><td>GitHub Actions (<code>.github/workflows/ci-cd.yml</code>)</td></tr>
+    <tr><td>Infrastructure as Code</td><td>Terraform (<code>infra/terraform/</code>)</td></tr>
+    <tr><td>Date</td><td>November 2026</td></tr>
+  </table>
+</section>
+
+<!-- ============================== 1 ============================== -->
+<h1>1. Introduction and Choice of Cloud Provider</h1>
+<p>The application is a full-stack <b>Personal Expense Tracker</b> (MERN stack): users register and log in (JWT), record categorized expenses, set monthly and per-category budgets with alerts, view charts and monthly reports, and export reports as PDF/CSV. It is naturally a <b>three-tier application</b>: a React single-page application (presentation tier), an Express/Node.js REST API (application/business-logic tier) and MongoDB (data tier). This report describes how it was containerized, deployed on AWS across public and private network tiers, and automated with a CI/CD pipeline, and justifies the design against the required non-functional requirements (NFRs).</p>
+<p><b>Why AWS.</b> AWS was selected because (i) it offers every building block the brief asks for as first-class managed services &mdash; VPC, NAT Gateway, Application Load Balancers with target groups, EC2 Auto Scaling Groups, Elastic Container Registry, Secrets Manager, Systems Manager, S3, EBS and CloudWatch; (ii) its Free plan ($100 credits, free-tier-eligible <code>t3.micro/t3.small</code> instances) allowed a realistic multi-AZ deployment at no personal cost; (iii) Terraform's AWS provider and GitHub Actions' official AWS actions are mature, enabling a fully reproducible infrastructure-as-code and CI/CD workflow; and (iv) it is the most widely used provider in industry, so the skills transfer directly.</p>
+<div class="note"><b>Account constraints discovered and handled.</b> The AWS Free-plan account is governed by an organization Service Control Policy that (a) allows only the <b>ap-southeast-2 (Sydney)</b> region, (b) denies Amazon DocumentDB / RDS cluster and instance creation, and (c) denies creating an IAM OIDC identity provider. The design was therefore deployed in Sydney, uses the brief's permitted alternative of a <i>properly secured self-managed database instance</i>, and authenticates CI/CD with a narrowly scoped IAM user instead of OIDC. Each constraint is documented as a limitation in Section 7.</div>
+
+<!-- ============================== 2 ============================== -->
+<h1>2. Overall Architecture and Design Decisions</h1>
+<figure>
+  <img src="../architecture-diagram.png" alt="Architecture diagram" style="max-height:108mm">
+  <figcaption>Figure 1 - Architecture: VPC with public, private-app and private-DB subnets in two Availability Zones, two load balancers, two Auto Scaling Groups, the MongoDB host, and the GitHub Actions &rarr; ECR &rarr; SSM deployment flow. Full-resolution version submitted separately as <code>Architecture-Diagram.png</code>.</figcaption>
+</figure>
+<p><b>Request path.</b> Browser &rarr; <b>public Application Load Balancer</b> (internet-facing, public subnets) &rarr; <b>web tier</b> (Nginx container serving the React build) &rarr; for <code>/api/*</code> Nginx reverse-proxies to the <b>internal ALB</b> (private subnets, not internet-reachable) &rarr; <b>application tier</b> (Express container) &rarr; <b>MongoDB</b> on a dedicated host in the private DB subnet.</p>
+<h2>2.1 Network design</h2>
+<table>
+  <tr><th>Component</th><th>Configuration</th><th>Purpose</th></tr>
+  <tr><td>VPC</td><td><code>10.0.0.0/16</code>, DNS hostnames on, 2 AZs (ap-southeast-2a/2b)</td><td>Isolated private address space for all tiers</td></tr>
+  <tr><td>Public subnets</td><td><code>10.0.1.0/24</code>, <code>10.0.2.0/24</code></td><td>Public ALB, NAT Gateway, web-tier instances</td></tr>
+  <tr><td>Private app subnets</td><td><code>10.0.11.0/24</code>, <code>10.0.12.0/24</code></td><td>Internal ALB and application-tier instances (no public IPs)</td></tr>
+  <tr><td>Private DB subnets</td><td><code>10.0.21.0/24</code>, <code>10.0.22.0/24</code></td><td>MongoDB host (no public IP)</td></tr>
+  <tr><td>Internet Gateway</td><td>attached to the VPC</td><td>Internet connectivity for public subnets</td></tr>
+  <tr><td>NAT Gateway</td><td>in public subnet 2a with an Elastic IP</td><td>Outbound-only internet for private hosts (image pulls, patches, Secrets Manager, S3)</td></tr>
+  <tr><td>Route tables</td><td>public: <code>0.0.0.0/0 &rarr; IGW</code>; private-app and private-db: <code>0.0.0.0/0 &rarr; NAT</code></td><td>Private hosts can initiate outbound traffic but nothing can connect in</td></tr>
+</table>
+<h2>2.2 Key design decisions</h2>
+<ul>
+  <li><b>EC2 Auto Scaling Groups running Docker</b> (instead of ECS/EKS): matches the brief's "Auto Scaling Groups" and "pull the new image onto the target compute instance", and keeps each tier's compute, scaling and security group independent.</li>
+  <li><b>Two load balancers</b>: the public ALB fronts the web tier; a separate <i>internal</i> ALB fronts the API so that the application tier is reachable <i>only</i> from the web tier, as the brief requires.</li>
+  <li><b>Same-origin API</b>: the browser calls <code>/api</code> on the same host; the web tier proxies it. The API is never exposed to the internet and no CORS surface is needed.</li>
+  <li><b>Release pointer in SSM Parameter Store</b>: the pipeline publishes the image tag (git SHA); instances read it at boot, so instances launched later by auto scaling always run the current release.</li>
+  <li><b>No SSH anywhere</b>: deployment and administration use AWS Systems Manager Run Command / Session Manager; no key pairs or port 22 rules exist.</li>
+  <li><b>Everything as code</b>: about 100 AWS resources are defined in Terraform and can be recreated or destroyed with one command.</li>
+</ul>
+
+<!-- ============================== 3 ============================== -->
+<h1>3. Services Used and Their Role in Each Tier</h1>
+<table>
+  <tr><th style="width:17%">Tier / area</th><th style="width:30%">AWS service</th><th>Role in this deployment</th></tr>
+  <tr><td>Web tier</td><td>EC2 Auto Scaling Group <code>expense-tracker-web-asg</code> (t3.micro &times; 2-4), public ALB + target group <code>web-tg</code></td><td>Runs the <code>expense-tracker-web</code> container (unprivileged Nginx + React build) on port 80; ALB health check <code>/healthz</code></td></tr>
+  <tr><td>Application tier</td><td>EC2 Auto Scaling Group <code>expense-tracker-app-asg</code> (t3.micro &times; 2-4), internal ALB + target group <code>app-tg</code></td><td>Runs the <code>expense-tracker-app</code> container (Express API, port 5000); health check <code>/api/health</code> reports DB state and release version</td></tr>
+  <tr><td>Data tier</td><td>EC2 <code>expense-tracker-mongodb</code> (t3.small, fixed IP 10.0.21.10), EBS gp3 20 GiB encrypted data volume, S3 backup bucket</td><td>MongoDB 7 container with authentication; data on a separate persistent volume; daily compressed <code>mongodump</code> to S3 (14-day lifecycle)</td></tr>
+  <tr><td>Registry</td><td>Amazon ECR (2 private repositories)</td><td>Stores web and app images; immutable SHA tags, scan-on-push, keep-last-10 lifecycle policy</td></tr>
+  <tr><td>Secrets</td><td>AWS Secrets Manager (<code>expense-tracker/app</code>, <code>expense-tracker/db</code>)</td><td>Generated DB credentials, connection string and JWT secret injected at container start</td></tr>
+  <tr><td>Deployment</td><td>SSM Parameter Store, SSM Run Command</td><td>Release tag per tier; rolling, SSH-less deploys from the pipeline</td></tr>
+  <tr><td>Monitoring</td><td>CloudWatch Logs, Alarms, Dashboard, SNS; EC2 auto-recovery</td><td>Container logs per tier, 5xx/unhealthy-host/CPU alarms, dashboard, automatic recovery of the DB host</td></tr>
+  <tr><td>Identity</td><td>IAM roles per tier, CI IAM user</td><td>Least-privilege access for each tier and for the pipeline</td></tr>
+  <tr><td>Automation</td><td>Terraform, GitHub Actions</td><td>Infrastructure as code; build-test-deploy pipeline</td></tr>
+</table>
+
+<!-- ============================== 4 ============================== -->
+<h1>4. Containerization and CI/CD Pipeline Design</h1>
+<h2>4.1 Containerization</h2>
+<ul>
+  <li><b>Web image</b> (<code>frontend/Dockerfile</code>): multi-stage &mdash; stage 1 builds the React app with Vite on <code>node:20-alpine</code>; stage 2 copies only the static files into <code>nginx-unprivileged:1.27-alpine</code> (non-root, port 8080). The Nginx config is a template whose API upstream and DNS resolver are injected per environment, and adds SPA routing, gzip, long-term asset caching, security headers and a <code>/healthz</code> endpoint.</li>
+  <li><b>App image</b> (<code>backend/Dockerfile</code>): multi-stage &mdash; production-only dependencies installed with <code>npm ci --omit=dev</code>, runs as the non-root <code>node</code> user, with a Docker <code>HEALTHCHECK</code>. The backend was refactored into <code>app.js</code>/<code>server.js</code> for testability and graceful SIGTERM shutdown.</li>
+  <li><b>docker-compose.yml</b> runs web, app and MongoDB locally on two separate Docker networks (web cannot reach the DB network), mirroring the AWS segmentation; the same compose file is used by the pipeline's integration test.</li>
+  <li><code>.dockerignore</code> files keep <code>node_modules</code>, tests and any <code>.env</code> secrets out of the images.</li>
+</ul>
+<h2>4.2 CI/CD pipeline (GitHub Actions)</h2>
+<table>
+  <tr><th style="width:4%">#</th><th style="width:26%">Job</th><th>What it does</th></tr>
+  <tr><td>1</td><td>Backend unit tests</td><td><code>npm ci &amp;&amp; npm test</code> (Node test runner + Supertest: health, 404, auth guard)</td></tr>
+  <tr><td>2</td><td>Frontend build</td><td>Compiles the React app to catch build errors</td></tr>
+  <tr><td>3</td><td>Terraform fmt &amp; validate</td><td>Rejects malformed infrastructure code</td></tr>
+  <tr><td>4</td><td>Integration test</td><td><code>docker compose up --build --wait</code>, then through Nginx: register a user &rarr; create an expense &rarr; list it; proves all three containers work together</td></tr>
+  <tr><td>5-6</td><td>Build &amp; push (web, app)</td><td>Docker Buildx with layer cache; push to ECR tagged with the commit SHA</td></tr>
+  <tr><td>7</td><td>Rolling deploy</td><td>Publishes the SHA to SSM, then runs the deploy script on each in-service instance <i>one at a time</i> via SSM Run Command (app tier first, then web) and waits for each container to pass its health check; finally smoke-tests the public URL until <code>/api/health</code> returns the new SHA and <code>db: connected</code></td></tr>
+</table>
+<p>Jobs 1-4 run on every push and pull request; jobs 5-7 run only on <code>main</code>. Concurrency control prevents overlapping deployments, and documentation-only commits skip the pipeline. Because each release is an immutable SHA-tagged image, rolling back means re-running the pipeline for an earlier commit.</p>
+
+<!-- ============================== 5 ============================== -->
+<h1>5. Security Considerations</h1>
+<table>
+  <tr><th style="width:22%">Control</th><th>Implementation and justification</th></tr>
+  <tr><td>Security groups per tier (least privilege)</td><td>Five security groups chained by <i>security-group references</i>, not IP ranges: public ALB &larr; internet :80; web &larr; public-ALB SG :80; internal ALB &larr; web SG :80; app &larr; internal-ALB SG :5000; MongoDB &larr; app SG :27017. Each tier accepts traffic only from the tier directly in front of it.</td></tr>
+  <tr><td>Network segmentation</td><td>Separate public, private-app and private-DB subnets. App and DB hosts have no public IP and reach the internet only outbound through NAT. The internal ALB has no public address (resolves to 10.0.x.x only).</td></tr>
+  <tr><td>Secrets management</td><td>DB password and JWT secret are generated by Terraform and stored only in Secrets Manager; containers receive them at start into <code>chmod 600</code> env files. Nothing is hard-coded in code or images; <code>.env</code>, <code>*.tfvars</code> and Terraform state are git-ignored.</td></tr>
+  <tr><td>CI/CD secrets</td><td>The pipeline authenticates with a dedicated IAM user whose key is stored as <b>GitHub encrypted secrets</b> (created and piped directly into GitHub, never displayed). Its policy only allows pushing to the two ECR repositories, updating the two release parameters and sending commands to instances tagged <code>Project=expense-tracker</code>.</td></tr>
+  <tr><td>IAM least privilege</td><td>Per-tier instance roles: each can pull only its own image, read only its own release tag and write only its own log group; only the app role may read the app secret; the DB role may only write to <code>backups/</code> in its bucket.</td></tr>
+  <tr><td>Encryption</td><td>All EBS volumes (including DB data) encrypted at rest; S3 backups encrypted with public access blocked and a TLS-only bucket policy; ECR encrypted (AES-256).</td></tr>
+  <tr><td>Host and container hardening</td><td>No SSH or key pairs; IMDSv2 required with hop limit 1, so containers cannot obtain instance-role credentials; web and app containers run as non-root; MongoDB authentication enforced.</td></tr>
+  <tr><td>Supply chain</td><td>Immutable image tags, ECR scan-on-push, and tests + integration test gating every deployment.</td></tr>
+</table>
+<p><b>Verified from the internet</b> (evidence file <code>10-security-and-backup-tests.txt</code>): the public ALB returns HTTP 200; a direct request to a web instance's public IP <span class="ok">times out</span> (blocked by its SG); the internal ALB resolves only to private addresses; the app and DB instances have <span class="ok">no public IP</span>.</p>
+
+<!-- ============================== 6 ============================== -->
+<h1>6. Testing Results - Successful Automated Deployment</h1>
+<table>
+  <tr><th>Test</th><th>Result</th></tr>
+  <tr><td>Backend unit tests (4 tests: health, 404, missing token, invalid token)</td><td class="ok">4/4 passed (locally and in CI)</td></tr>
+  <tr><td>Integration test: three containers via docker compose (register &rarr; add expense &rarr; list through Nginx)</td><td class="ok">Passed in every pipeline run</td></tr>
+  <tr><td>Pipeline runs on <code>main</code> (runs #2, #3, #4)</td><td class="ok">All 7 jobs green; rolling deploy ~55 s; total ~2.5 min per run</td></tr>
+  <tr><td>Rolling deployment</td><td class="ok">Each instance reported "Healthy: &lt;ECR image&gt;:&lt;SHA&gt;" before the next was updated; site stayed available</td></tr>
+  <tr><td>Post-deploy smoke test through the public ALB</td><td class="ok"><code>/api/health</code> &rarr; <code>{"status":"ok","db":"connected","version":"db62666..."}</code></td></tr>
+  <tr><td>Load balancer target health</td><td class="ok">web-tg 2/2 healthy, app-tg 2/2 healthy; both ASGs "At desired capacity"</td></tr>
+  <tr><td>Database persistence and backup</td><td class="ok">Data survives redeploys; manual <code>mongodump</code> uploaded to S3 (<code>backups/*.archive.gz</code>)</td></tr>
+  <tr><td>End-to-end in a browser</td><td class="ok">Registration, expenses, dashboard charts, reports and budget alerts work (Figures A21-A26)</td></tr>
+</table>
+<p><b>Issue found and fixed by the pipeline.</b> The very first run failed only at the web-tier deploy step: the Auto Scaling Group had just replaced an instance that was not yet registered with Systems Manager. The deploy script was changed to skip still-booting instances (they self-deploy from the published tag at boot) and the CI user was granted <code>ssm:DescribeInstanceInformation</code>; every subsequent run has been fully green. This demonstrates the self-healing release-pointer design. The successful pipeline run is shown in Figure A20 (Appendix A.7).</p>
+
+<!-- ============================== 7 ============================== -->
+<h1>7. Non-Functional Requirements Justification</h1>
+<table>
+  <tr><th style="width:14%">NFR</th><th style="width:49%">Design / implementation decisions that support it</th><th>Known limitations and improvements</th></tr>
+  <tr><td><b>Scalability</b></td><td>Stateless containers (JWT, no server sessions) behind load balancers; web and app tiers scale horizontally and independently in their own ASGs (2&rarr;4 instances); the DB tier is isolated so it can be scaled separately.</td><td>Max 4 per tier to protect free credits (one variable to raise). Database scales vertically only &rarr; a MongoDB replica set / sharding or a managed cluster would scale reads and writes.</td></tr>
+  <tr><td><b>Availability / Reliability</b></td><td>Web and app tiers span <b>two AZs</b> with at least two instances each; ELB health checks make the ASGs replace failed instances automatically; Docker restart policies; DB host has EC2 auto-recovery, data on a separate EBS volume and daily S3 backups.</td><td><b>Single DB instance in one AZ is the main single point of failure</b> &rarr; 3-node replica set across AZs or DocumentDB (blocked on this account). Single NAT Gateway &rarr; one per AZ.</td></tr>
+  <tr><td><b>Elasticity</b></td><td>Target-tracking policies scale out and back in automatically: average CPU 50 % (both tiers) and 1,000 ALB requests per target (web tier).</td><td>Scale-out takes ~2-3 min (boot + image pull); a pre-baked AMI or Fargate would react faster.</td></tr>
+  <tr><td><b>Security</b></td><td>Section 5: SG chaining, private subnets, least-privilege IAM, Secrets Manager, encryption at rest, IMDSv2, no SSH, scanned immutable images, scoped CI credentials.</td><td>HTTP only (no domain for an ACM certificate) &rarr; Route 53 + ACM + HTTPS listener and AWS WAF. App&rarr;DB traffic is VPC-internal but not TLS. CI uses an access key because OIDC is blocked.</td></tr>
+  <tr><td><b>Maintainability / Deployability</b></td><td>All infrastructure in Terraform; every push runs tests, an integration test, image build, rolling deploy and smoke test automatically; releases are SHA-tagged and roll back by redeploying an older commit; zero manual server access.</td><td>Terraform is applied manually with local state &rarr; move state to S3 + DynamoDB locking and add a plan/apply stage to the pipeline.</td></tr>
+  <tr><td><b>Performance / Latency</b></td><td>Nginx serves static assets with gzip and one-year immutable caching; load is spread by ALBs; all tiers are in one region and VPC; gp3 storage for the DB; MongoDB indexes on <code>user+date</code> and <code>user+category</code>.</td><td>Add CloudFront in front of the web tier for global users and a cache (ElastiCache) for report aggregations.</td></tr>
+  <tr><td><b>Cost-Efficiency</b></td><td>Free-tier-eligible t3.micro/t3.small instances; ASGs idle at the minimum of 2; a self-managed DB instead of a ~$70/month managed cluster; one NAT Gateway; ECR lifecycle and 14-day log retention; whole stack destroyable with one command.</td><td>See Section 8 for further measures.</td></tr>
+  <tr><td><b>Portability</b></td><td>All three tiers are standard Docker images (<code>nginx-unprivileged</code>, <code>node</code>, <code>mongo:7</code>) configured only through environment variables; the same images run locally with docker compose, on EC2 here, and could run unchanged on ECS, EKS, AKS or GKE; switching to Atlas or DocumentDB only changes <code>MONGO_URI</code>.</td><td>Terraform code is AWS-specific and would need rewriting for another provider.</td></tr>
+</table>
+
+<!-- ============================== 8 ============================== -->
+<h1>8. Cost Estimate and Optimization</h1>
+<table>
+  <tr><th>Service</th><th>Configuration (ap-southeast-2, on-demand)</th><th style="text-align:right">&asymp; USD / month</th></tr>
+  <tr><td>EC2 (web + app)</td><td>4 &times; t3.micro, 730 h</td><td style="text-align:right">38.50</td></tr>
+  <tr><td>EBS</td><td>4 &times; 10 GB gp3 root volumes</td><td style="text-align:right">3.85</td></tr>
+  <tr><td>Application Load Balancers</td><td>2 ALBs (public + internal), low LCU usage</td><td style="text-align:right">48.00</td></tr>
+  <tr><td>NAT Gateway</td><td>1 &times; 730 h + ~5 GB processed</td><td style="text-align:right">43.40</td></tr>
+  <tr><td>Public IPv4 addresses</td><td>NAT EIP + 2 web instances + 2 ALB nodes</td><td style="text-align:right">18.25</td></tr>
+  <tr><td>Database host</td><td>1 &times; t3.small + 10 GB root + 20 GB data gp3</td><td style="text-align:right">22.50</td></tr>
+  <tr><td>S3, ECR, Secrets Manager, CloudWatch, SNS, SSM</td><td>backups &lt; 1 GB, 2 secrets, logs/alarms/dashboard</td><td style="text-align:right">6.05</td></tr>
+  <tr><td colspan="2"><b>Total</b></td><td style="text-align:right"><b>&asymp; 180 / month (&asymp; 6 / day)</b></td></tr>
+</table>
+<p>The deployment runs on AWS Free-plan credits ($100), so the evaluation period costs nothing out of pocket. Figures are on-demand estimates and should be confirmed with the AWS Pricing Calculator.</p>
+<p><b>Cost optimization measures:</b></p>
+<ul>
+  <li><b>Replace the NAT Gateway with VPC endpoints</b> (free S3 gateway endpoint plus ECR, SSM, Secrets Manager and CloudWatch Logs interface endpoints) or a NAT instance, removing most of the ~$43/month NAT charge.</li>
+  <li><b>Serve the React build from S3 + CloudFront</b> (or use a single ALB with path routing), removing the two web instances, their public IPs and one ALB (~$50/month).</li>
+  <li><b>Schedule non-production environments</b>: scale ASGs to zero and stop the DB host outside working hours, or <code>terraform destroy</code> when idle.</li>
+  <li><b>Graviton and commitments</b>: t4g instances are ~20 % cheaper (multi-arch images), and Savings Plans cut steady-state compute by 30-40 %.</li>
+</ul>
+
+<!-- ============================== 9 ============================== -->
+<h1>9. Conclusion</h1>
+<p>The Expense Tracker was successfully containerized and deployed on AWS as a secure three-tier architecture: a public web tier and a private application tier, each in its own Auto Scaling Group behind its own load balancer across two Availability Zones, and an isolated, authenticated, encrypted and backed-up database tier. Container images are stored in Amazon ECR, and a GitHub Actions pipeline tests, builds, pushes and performs zero-SSH rolling deployments on every change, verified by an automatic smoke test. Five cloud-native enhancements were implemented (S3 object storage, persistent EBS block storage, CloudWatch logging and monitoring, Terraform infrastructure as code and a cost estimate). The main remaining limitations &mdash; a single-instance database, HTTP-only access and key-based CI credentials &mdash; are consequences of the Free-plan account restrictions and are documented above with concrete improvements.</p>
+
+<!-- ============================== APPENDIX A ============================== -->
+<h1 class="pb">Appendix A - Deployment Evidence (Screenshots)</h1>
+<p>All AWS Console screenshots were taken in region ap-southeast-2 (Sydney). Additional full-detail AWS CLI exports are in the repository under <code>docs/evidence/</code>.</p>
+
+<h2>A.1 Network / VPC configuration and subnets</h2>
+<figure><img src="../screenshots/01a-vpc.png"><figcaption>Figure A1 - VPC <code>expense-tracker-vpc</code>, IPv4 CIDR 10.0.0.0/16.</figcaption></figure>
+<figure><img src="../screenshots/01b-subnets.png"><figcaption>Figure A2 - Six subnets: public, private-app and private-DB in two Availability Zones.</figcaption></figure>
+<figure><img src="../screenshots/01c-route-public.png"><figcaption>Figure A3 - Public route table: 0.0.0.0/0 &rarr; Internet Gateway.</figcaption></figure>
+<figure><img src="../screenshots/01c-route-private.png"><figcaption>Figure A4 - Private-app route table: 0.0.0.0/0 &rarr; NAT Gateway (outbound only).</figcaption></figure>
+<figure><img src="../screenshots/01d-internet-gateway.png"><figcaption>Figure A5 - Internet Gateway attached to the VPC.</figcaption></figure>
+<figure><img src="../screenshots/01d-nat-gateway.png"><figcaption>Figure A6 - NAT Gateway (Available) with its public Elastic IP.</figcaption></figure>
+
+<h2>A.2 Compute instances / container hosts</h2>
+<figure><img src="../screenshots/02a-ec2-instances.png"><figcaption>Figure A7 - Five running instances: 2 web (public IPs), 2 app and 1 MongoDB host (no public IPs).</figcaption></figure>
+<figure><img src="../screenshots/02b-autoscaling-groups.png"><figcaption>Figure A8 - Web and app Auto Scaling Groups: 2/2 healthy, min 2, max 4.</figcaption></figure>
+<figure><img src="../screenshots/02c-autoscaling-policies.png"><figcaption>Figure A9 - Target-tracking scaling policies: CPU 50 % and 1,000 requests per target.</figcaption></figure>
+
+<h2>A.3 Security groups / firewall rules</h2>
+<figure><img src="../screenshots/03a-security-groups.png"><figcaption>Figure A10 - One security group per tier.</figcaption></figure>
+<div class="grid2">
+<figure><img src="../screenshots/03b-sg-app-inbound.png"><figcaption>Figure A11 - App SG: inbound TCP 5000 only (source: internal-ALB SG).</figcaption></figure>
+<figure><img src="../screenshots/03c-sg-db-inbound.png"><figcaption>Figure A12 - DB SG: inbound TCP 27017 only (source: app SG).</figcaption></figure>
+</div>
+
+<h2>A.4 Load balancer configuration</h2>
+<figure><img src="../screenshots/04a-load-balancers.png"><figcaption>Figure A13 - Internet-facing public ALB and internal ALB, both Active.</figcaption></figure>
+<div class="grid2">
+<figure><img src="../screenshots/04b-target-group-web.png"><figcaption>Figure A14 - Web target group: 2 healthy targets on port 80.</figcaption></figure>
+<figure><img src="../screenshots/04c-target-group-app.png"><figcaption>Figure A15 - App target group: 2 healthy targets on port 5000.</figcaption></figure>
+</div>
+
+<h2>A.5 Database instance</h2>
+<figure><img src="../screenshots/05a-database-instance.png"><figcaption>Figure A16 - MongoDB host <code>expense-tracker-mongodb</code>: private IP 10.0.21.10, no public IPv4.</figcaption></figure>
+<figure><img src="../screenshots/05b-database-storage.png"><figcaption>Figure A17 - Database host storage (EBS); the separate 20 GiB encrypted data volume is listed in <code>docs/evidence/05-database.txt</code>.</figcaption></figure>
+
+<h2>A.6 Docker images and container registry</h2>
+<figure><img src="../screenshots/06a-ecr-repositories.png"><figcaption>Figure A18 - Amazon ECR private repositories (immutable tags, AES-256).</figcaption></figure>
+<figure><img src="../screenshots/06b-ecr-images.png"><figcaption>Figure A19 - Images pushed by the pipeline, tagged with git commit SHAs.</figcaption></figure>
+
+<h2>A.7 CI/CD pipeline run</h2>
+<figure><img src="../screenshots/07-cicd-pipeline-run.png" style="max-height:175mm"><figcaption>Figure A20 - Successful GitHub Actions run: unit tests, frontend build, Terraform validate &rarr; integration test &rarr; build &amp; push (matrix) &rarr; rolling deploy to AWS. Build-and-push logs: <code>docs/evidence/06c-docker-build-log-*.txt</code>.</figcaption></figure>
+
+<h2>A.8 Running application accessed via a browser</h2>
+<figure><img src="../screenshots/08a-app-login-page.png" style="max-height:110mm"><figcaption>Figure A21 - Login page served through the public load balancer.</figcaption></figure>
+<figure><img src="../screenshots/08b-app-dashboard.png" style="max-height:130mm"><figcaption>Figure A22 - Dashboard with live data from MongoDB (totals, budget usage, trend and category charts).</figcaption></figure>
+<figure><img src="../screenshots/08c-app-expenses.png" style="max-height:130mm"><figcaption>Figure A23 - Expenses list with filtering and pagination.</figcaption></figure>
+<figure><img src="../screenshots/08d-app-reports.png" style="max-height:150mm"><figcaption>Figure A24 - Monthly report page.</figcaption></figure>
+<figure><img src="../screenshots/08e-app-budget.png" style="max-height:130mm"><figcaption>Figure A25 - Budget page with category budget and alerts.</figcaption></figure>
+<figure><img src="../screenshots/08f-api-health.png" style="max-height:40mm"><figcaption>Figure A26 - <code>/api/health</code> through all tiers: deployed version and <code>db: connected</code>.</figcaption></figure>
+
+<!-- ============================== APPENDIX B ============================== -->
+<h1 class="pb">Appendix B - Source Files and Repository</h1>
+<p><b>Repository:</b> https://github.com/abdurrafey250904-hash/Expense-Tracker</p>
+<table>
+  <tr><th style="width:38%">File</th><th>Purpose</th></tr>
+  <tr><td><code>frontend/Dockerfile</code></td><td>Web-tier image (Vite build &rarr; unprivileged Nginx)</td></tr>
+  <tr><td><code>frontend/nginx/default.conf.template</code></td><td>Nginx: SPA routing, <code>/healthz</code>, security headers, <code>/api</code> reverse proxy</td></tr>
+  <tr><td><code>backend/Dockerfile</code></td><td>Application-tier image (Express API, non-root, health check)</td></tr>
+  <tr><td><code>docker-compose.yml</code></td><td>Local / CI orchestration of web, app and MongoDB</td></tr>
+  <tr><td><code>.github/workflows/ci-cd.yml</code></td><td>CI/CD pipeline definition</td></tr>
+  <tr><td><code>.github/scripts/rolling-deploy.sh</code></td><td>Rolling deployment through SSM Run Command</td></tr>
+  <tr><td><code>infra/terraform/*.tf</code></td><td>Infrastructure as code: VPC, security groups, ALBs, ASGs, database, ECR, IAM, secrets, monitoring</td></tr>
+  <tr><td><code>infra/terraform/user_data*.sh.tftpl</code></td><td>Instance bootstrap: Docker, deploy service, MongoDB volume and backups</td></tr>
+  <tr><td><code>backend/tests/app.test.js</code></td><td>Unit tests run by the pipeline</td></tr>
+  <tr><td><code>scripts/collect-evidence.sh</code></td><td>Exports AWS CLI evidence to <code>docs/evidence/</code></td></tr>
+  <tr><td><code>DEPLOYMENT.md</code></td><td>Step-by-step deployment log with one-line explanations</td></tr>
+</table>
+<p>Kubernetes manifests are not applicable: the Kubernetes enhancement was not selected (the brief requires at least one enhancement; five others were implemented).</p>
+
+</body>
+</html>
