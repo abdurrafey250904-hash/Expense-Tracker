@@ -17,3 +17,6 @@ coverage/
 !*.tfvars.example
 crash.log
 tfplan
+
+# Final CEA submission files (built locally)
+submission/
