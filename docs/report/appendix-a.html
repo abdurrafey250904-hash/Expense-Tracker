@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CEA Appendix A - Three-Tier Expense Tracker on AWS</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Calibri, Arial, sans-serif; font-size: 10pt; line-height: 1.38; color: #1a1a1a; margin: 0; }
+  h1 { font-size: 15pt; color: #0b3d6e; border-bottom: 2px solid #0b3d6e; padding-bottom: 3px; margin: 16px 0 8px; page-break-after: avoid; }
+  h2 { font-size: 11.5pt; color: #0b3d6e; margin: 12px 0 5px; page-break-after: avoid; }
+  p { margin: 0 0 7px; text-align: justify; }
+  ul { margin: 0 0 7px 0; padding-left: 18px; }
+  li { margin-bottom: 2px; }
+  code { font-family: Consolas, "Courier New", monospace; font-size: 8.8pt; background: #f1f3f5; padding: 0 3px; border-radius: 2px; }
+  table { width: 100%; border-collapse: collapse; margin: 4px 0 10px; font-size: 8.9pt; page-break-inside: auto; }
+  tr { page-break-inside: avoid; }
+  th { background: #0b3d6e; color: #fff; text-align: left; padding: 4px 6px; font-weight: 600; }
+  td { border: 1px solid #c9d3de; padding: 3px 6px; vertical-align: top; }
+  tr:nth-child(even) td { background: #f6f8fb; }
+  figure { margin: 6px 0 12px; text-align: center; page-break-inside: avoid; }
+  figure img { max-width: 100%; max-height: 205mm; border: 1px solid #c9d3de; }
+  figcaption { font-size: 8.6pt; color: #444; margin-top: 3px; font-style: italic; }
+  .cover { height: 255mm; display: flex; flex-direction: column; justify-content: center; text-align: center; page-break-after: always; }
+  .cover .course { font-size: 12pt; color: #333; margin-bottom: 4px; }
+  .cover h1.title { font-size: 22pt; border: none; color: #0b3d6e; margin: 26px 0 8px; line-height: 1.25; }
+  .cover .sub { font-size: 12.5pt; color: #333; margin-bottom: 40px; }
+  .cover table { width: 70%; margin: 0 auto; font-size: 10.5pt; }
+  .cover td { border: none; border-bottom: 1px solid #dde3ea; padding: 6px 8px; text-align: left; background: none !important; }
+  .cover td:first-child { font-weight: 600; width: 38%; color: #0b3d6e; }
+  .pb { page-break-before: always; }
+  .note { border-left: 3px solid #0b3d6e; background: #eef4fa; padding: 5px 8px; margin: 6px 0 9px; font-size: 9.4pt; }
+  .ok { color: #137333; font-weight: 600; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .grid2 figure img { max-height: 95mm; }
+</style>
+</head>
+<body>
+<section style="text-align:center;margin:0 0 14px;padding-bottom:10px;border-bottom:2px solid #0b3d6e">
+  <div style="font-size:10.5pt;color:#333">Cloud Computing (SE-490) - Complex Engineering Activity (CEA) - Section B</div>
+  <div style="font-size:18pt;font-weight:700;color:#0b3d6e;margin:6px 0 4px">Appendix A - Deployment Evidence (Screenshots)</div>
+  <div style="font-size:10.5pt;color:#333">Three-Tier Expense Tracker on AWS (ap-southeast-2, Sydney)</div>
+  <div style="font-size:10pt;color:#333;margin-top:4px">Abdur Rafey (SE-23093) &middot; Murtazah Hussain (SE-23097)</div>
+  <div style="font-size:9pt;color:#555;margin-top:4px">Accompanies: CEA Technical Report (separate PDF) &middot; Repository: https://github.com/abdurrafey250904-hash/Expense-Tracker</div>
+</section>
+
+
+<p>All AWS Console screenshots were taken in region ap-southeast-2 (Sydney). Additional full-detail AWS CLI exports are in the repository under <code>docs/evidence/</code>.</p>
+
+<h2 style="margin-top:4px">A.1 Network / VPC configuration and subnets</h2>
+<figure><img src="../screenshots/01a-vpc.png"><figcaption>Figure A1 - VPC <code>expense-tracker-vpc</code>, IPv4 CIDR 10.0.0.0/16.</figcaption></figure>
+<figure><img src="../screenshots/01b-subnets.png"><figcaption>Figure A2 - Six subnets: public, private-app and private-DB in two Availability Zones.</figcaption></figure>
+<figure><img src="../screenshots/01c-route-public.png"><figcaption>Figure A3 - Public route table: 0.0.0.0/0 &rarr; Internet Gateway.</figcaption></figure>
+<figure><img src="../screenshots/01c-route-private.png"><figcaption>Figure A4 - Private-app route table: 0.0.0.0/0 &rarr; NAT Gateway (outbound only).</figcaption></figure>
+<figure><img src="../screenshots/01d-internet-gateway.png"><figcaption>Figure A5 - Internet Gateway attached to the VPC.</figcaption></figure>
+<figure><img src="../screenshots/01d-nat-gateway.png"><figcaption>Figure A6 - NAT Gateway (Available) with its public Elastic IP.</figcaption></figure>
+
+<h2>A.2 Compute instances / container hosts</h2>
+<figure><img src="../screenshots/02a-ec2-instances.png"><figcaption>Figure A7 - Five running instances: 2 web (public IPs), 2 app and 1 MongoDB host (no public IPs).</figcaption></figure>
+<figure><img src="../screenshots/02b-autoscaling-groups.png"><figcaption>Figure A8 - Web and app Auto Scaling Groups: 2/2 healthy, min 2, max 4.</figcaption></figure>
+<figure><img src="../screenshots/02c-autoscaling-policies.png"><figcaption>Figure A9 - Target-tracking scaling policies: CPU 50 % and 1,000 requests per target.</figcaption></figure>
+
+<h2>A.3 Security groups / firewall rules</h2>
+<figure><img src="../screenshots/03a-security-groups.png"><figcaption>Figure A10 - One security group per tier.</figcaption></figure>
+<div class="grid2">
+<figure><img src="../screenshots/03b-sg-app-inbound.png"><figcaption>Figure A11 - App SG: inbound TCP 5000 only (source: internal-ALB SG).</figcaption></figure>
+<figure><img src="../screenshots/03c-sg-db-inbound.png"><figcaption>Figure A12 - DB SG: inbound TCP 27017 only (source: app SG).</figcaption></figure>
+</div>
+
+<h2>A.4 Load balancer configuration</h2>
+<figure><img src="../screenshots/04a-load-balancers.png"><figcaption>Figure A13 - Internet-facing public ALB and internal ALB, both Active.</figcaption></figure>
+<div class="grid2">
+<figure><img src="../screenshots/04b-target-group-web.png"><figcaption>Figure A14 - Web target group: 2 healthy targets on port 80.</figcaption></figure>
+<figure><img src="../screenshots/04c-target-group-app.png"><figcaption>Figure A15 - App target group: 2 healthy targets on port 5000.</figcaption></figure>
+</div>
+
+<h2>A.5 Database instance</h2>
+<figure><img src="../screenshots/05a-database-instance.png"><figcaption>Figure A16 - MongoDB host <code>expense-tracker-mongodb</code>: private IP 10.0.21.10, no public IPv4.</figcaption></figure>
+<figure><img src="../screenshots/05b-database-storage.png"><figcaption>Figure A17 - Database host storage (EBS); the separate 20 GiB encrypted data volume is listed in <code>docs/evidence/05-database.txt</code>.</figcaption></figure>
+
+<h2>A.6 Docker images and container registry</h2>
+<figure><img src="../screenshots/06a-ecr-repositories.png"><figcaption>Figure A18 - Amazon ECR private repositories (immutable tags, AES-256).</figcaption></figure>
+<figure><img src="../screenshots/06b-ecr-images.png"><figcaption>Figure A19 - Images pushed by the pipeline, tagged with git commit SHAs.</figcaption></figure>
+
+<h2>A.7 CI/CD pipeline run</h2>
+<figure><img src="../screenshots/07-cicd-pipeline-run.png" style="max-height:175mm"><figcaption>Figure A20 - Successful GitHub Actions run: unit tests, frontend build, Terraform validate &rarr; integration test &rarr; build &amp; push (matrix) &rarr; rolling deploy to AWS. Build-and-push logs: <code>docs/evidence/06c-docker-build-log-*.txt</code>.</figcaption></figure>
+
+<h2>A.8 Running application accessed via a browser</h2>
+<figure><img src="../screenshots/08a-app-login-page.png" style="max-height:110mm"><figcaption>Figure A21 - Login page served through the public load balancer.</figcaption></figure>
+<figure><img src="../screenshots/08b-app-dashboard.png" style="max-height:130mm"><figcaption>Figure A22 - Dashboard with live data from MongoDB (totals, budget usage, trend and category charts).</figcaption></figure>
+<figure><img src="../screenshots/08c-app-expenses.png" style="max-height:130mm"><figcaption>Figure A23 - Expenses list with filtering and pagination.</figcaption></figure>
+<figure><img src="../screenshots/08d-app-reports.png" style="max-height:150mm"><figcaption>Figure A24 - Monthly report page.</figcaption></figure>
+<figure><img src="../screenshots/08e-app-budget.png" style="max-height:130mm"><figcaption>Figure A25 - Budget page with category budget and alerts.</figcaption></figure>
+<figure><img src="../screenshots/08f-api-health.png" style="max-height:40mm"><figcaption>Figure A26 - <code>/api/health</code> through all tiers: deployed version and <code>db: connected</code>.</figcaption></figure>
+
+
+</body>
+</html>
