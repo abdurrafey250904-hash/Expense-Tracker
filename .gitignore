@@ -20,3 +20,5 @@ tfplan
 
 # Final CEA submission files (built locally)
 submission/
+# Viva preparation material (local only)
+prep/
